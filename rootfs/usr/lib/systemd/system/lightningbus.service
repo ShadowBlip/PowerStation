@@ -1,0 +1,9 @@
+[Unit]
+Description=LightningBus Service
+After=graphical-session.target
+
+[Service]
+ExecStart=/usr/bin/lightning-bus
+
+[Install]
+WantedBy=multi-user.target
