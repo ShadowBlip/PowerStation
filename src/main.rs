@@ -3,10 +3,24 @@ use std::{error::Error, future::pending};
 use zbus::Connection;
 
 use crate::performance::cpu::cpu;
-use crate::performance::gpu::{self, get_gpu};
+use crate::performance::gpu::{self, GraphicsCard};
 
 const BUS_NAME: &str = "org.shadowblip.LightningBus";
 const PREFIX: &str = "/org/shadowblip/Performance";
+
+trait TitleCase {
+    fn title(&self) -> String;
+}
+
+impl TitleCase for &str {
+    fn title(&self) -> String {
+        if !self.is_ascii() || self.is_empty() {
+            return String::from(*self);
+        }
+        let (head, tail) = self.split_at(1);
+        head.to_uppercase() + tail
+    }
+}
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -31,11 +45,37 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }
 
     // Generate GPU objects to serve
+    // TODO: There must be a better way to do this
     for gpu in gpus {
-        let gpu_path = format!("{0}/GPU", PREFIX);
         match gpu {
-            gpu::GPU::AMD(t) => connection.object_server().at(gpu_path, t).await?,
-            gpu::GPU::Intel(t) => connection.object_server().at(gpu_path, t).await?,
+            gpu::GPU::AMD(card) => {
+                let card_name = card.name().as_str().title();
+                let gpu_path = format!("{0}/GPU/{1}", PREFIX, card_name);
+                let connectors = gpu::get_connectors(card.name());
+                connection.object_server().at(gpu_path.clone(), card).await?;
+
+                // Build the connector objects
+                for connector in connectors {
+                    let name = connector.name.clone().replace("-", "/");
+                    let port_path = format!("{0}/{1}", gpu_path, name);
+                    println!("Getting connector objects for: {}", port_path);
+                    connection.object_server().at(port_path, connector).await?;
+                }
+            },
+
+            gpu::GPU::Intel(card) => {
+                let card_name = card.name().as_str().title();
+                let gpu_path = format!("{0}/GPU/{1}", PREFIX, card_name);
+                let connectors = gpu::get_connectors(card.name());
+                connection.object_server().at(gpu_path.clone(), card).await?;
+
+                // Build the connector objects
+                for connector in connectors {
+                    let name = connector.name.clone().replace("-", "/");
+                    let port_path = format!("{0}/{1}", gpu_path, name);
+                    connection.object_server().at(port_path, connector).await?;
+                }
+            },
         };
     }
 
