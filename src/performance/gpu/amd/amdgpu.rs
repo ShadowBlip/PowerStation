@@ -127,7 +127,7 @@ impl GraphicsCard for AMDGPU {
         let file = OpenOptions::new().write(true).open(path.clone());
 
         // Write the value
-        println!(
+        log::debug!(
             "Writing value '{}' to: {}",
             command.clone().trim(),
             path.clone()
@@ -140,7 +140,7 @@ impl GraphicsCard for AMDGPU {
             .map_err(|err| fdo::Error::IOError(err.to_string()))?;
 
         // Write the "commit" command
-        println!("Writing value '{}' to: {}", "c", path.clone());
+        log::debug!("Writing value '{}' to: {}", "c", path.clone());
         let file = OpenOptions::new().write(true).open(path);
         file
             // convert the std::io::Error to a zbus::fdo::Error

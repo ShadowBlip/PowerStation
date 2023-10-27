@@ -152,7 +152,7 @@ pub fn get_cores() -> Vec<CPUCore> {
     let paths = fs::read_dir(CPUID_PATH).unwrap();
     let mut i = 0;
     for path in paths {
-        println!("Discovered core: {}", path.unwrap().path().display());
+        log::info!("Discovered core: {}", path.unwrap().path().display());
         let core_path = format!("/sys/bus/cpu/devices/cpu{0}", i);
         let core = CPUCore {
             number: i,

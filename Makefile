@@ -57,6 +57,10 @@ run: setup debug ## Build and run
 clean: ## Remove build artifacts
 	rm -rf target
 
+.PHONY: format
+format: ## Run rustfmt on all source files
+	rustfmt --edition 2021 $(ALL_RS)
+
 .PHONY: setup
 setup: /usr/share/dbus-1/system.d/org.shadowblip.LightningBus.conf ## Install dbus policies
 /usr/share/dbus-1/system.d/org.shadowblip.LightningBus.conf:

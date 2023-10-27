@@ -60,7 +60,7 @@ pub fn get_gpus() -> Vec<GPU> {
             continue;
         }
 
-        println!("Discovered gpu: {}", file_path);
+        log::info!("Discovered gpu: {}", file_path);
         let gpu = get_gpu(file_path);
         if gpu.is_err() {
             continue;
@@ -116,9 +116,12 @@ pub fn get_gpu(path: String) -> Result<GPU, std::io::Error> {
     let mut vendor: Option<String> = None;
     let mut device: Option<String> = None;
     let mut subdevice: Option<String> = None;
-    println!(
+    log::debug!(
         "Getting device info from: {} {} {} {}",
-        vendor_id, device_id, revision_id, subvendor_id
+        vendor_id,
+        device_id,
+        revision_id,
+        subvendor_id
     );
     for line in reader.lines() {
         let line = line?;
@@ -134,14 +137,14 @@ pub fn get_gpu(path: String) -> Result<GPU, std::io::Error> {
                     .trim()
                     .to_string(),
             );
-            println!("Found vendor: {}", vendor.clone().unwrap());
+            log::debug!("Found vendor: {}", vendor.clone().unwrap());
             continue;
         }
         if vendor.is_some() && !line.starts_with("\t") {
             if line.starts_with("#") {
                 continue;
             }
-            println!("Got to end of vendor list. Device not found.");
+            log::debug!("Got to end of vendor list. Device not found.");
             break;
         }
 
@@ -157,11 +160,11 @@ pub fn get_gpu(path: String) -> Result<GPU, std::io::Error> {
                     .trim()
                     .to_string(),
             );
-            println!("Found device name: {}", device.clone().unwrap());
+            log::debug!("Found device name: {}", device.clone().unwrap());
         }
 
         if device.is_some() && !line.starts_with("\t\t") {
-            println!("Got to end of device list. Subdevice not found");
+            log::debug!("Got to end of device list. Subdevice not found");
             break;
         }
 
@@ -174,7 +177,7 @@ pub fn get_gpu(path: String) -> Result<GPU, std::io::Error> {
                     .trim()
                     .to_string(),
             );
-            println!("Found subdevice name: {}", subdevice.clone().unwrap());
+            log::debug!("Found subdevice name: {}", subdevice.clone().unwrap());
             break;
         }
     }
@@ -254,7 +257,7 @@ pub fn get_connector(gpu_name: String, path: String) -> Connector {
 /// Returns a list of [Connector] instances for the given graphics card name.
 /// E.g. `"card1"`
 pub fn get_connectors(gpu_name: String) -> Vec<Connector> {
-    println!("Discovering connectors for GPU: {}", gpu_name);
+    log::debug!("Discovering connectors for GPU: {}", gpu_name);
     let mut connectors: Vec<Connector> = Vec::new();
     let paths = fs::read_dir(DRM_PATH).unwrap();
     for path in paths {
@@ -273,6 +276,6 @@ pub fn get_connectors(gpu_name: String) -> Vec<Connector> {
         connectors.push(connector);
     }
 
-    println!("Finished finding connectors");
+    log::debug!("Finished finding connectors");
     return connectors;
 }

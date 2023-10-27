@@ -1,9 +1,11 @@
-mod performance;
+use simple_logger::SimpleLogger;
 use std::{error::Error, future::pending};
 use zbus::Connection;
 
 use crate::performance::cpu::cpu;
 use crate::performance::gpu::{self, GraphicsCard};
+
+mod performance;
 
 const BUS_NAME: &str = "org.shadowblip.LightningBus";
 const PREFIX: &str = "/org/shadowblip/Performance";
@@ -24,7 +26,8 @@ impl TitleCase for &str {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    println!("Starting LightningBus");
+    SimpleLogger::new().init().unwrap();
+    log::info!("Starting LightningBus");
 
     // Discover all CPUs
     let cpu = cpu::CPU::new();
@@ -52,22 +55,28 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 let card_name = card.name().as_str().title();
                 let gpu_path = format!("{0}/GPU/{1}", PREFIX, card_name);
                 let connectors = gpu::get_connectors(card.name());
-                connection.object_server().at(gpu_path.clone(), card).await?;
+                connection
+                    .object_server()
+                    .at(gpu_path.clone(), card)
+                    .await?;
 
                 // Build the connector objects
                 for connector in connectors {
                     let name = connector.name.clone().replace("-", "/");
                     let port_path = format!("{0}/{1}", gpu_path, name);
-                    println!("Getting connector objects for: {}", port_path);
+                    log::debug!("Getting connector objects for: {}", port_path);
                     connection.object_server().at(port_path, connector).await?;
                 }
-            },
+            }
 
             gpu::GPU::Intel(card) => {
                 let card_name = card.name().as_str().title();
                 let gpu_path = format!("{0}/GPU/{1}", PREFIX, card_name);
                 let connectors = gpu::get_connectors(card.name());
-                connection.object_server().at(gpu_path.clone(), card).await?;
+                connection
+                    .object_server()
+                    .at(gpu_path.clone(), card)
+                    .await?;
 
                 // Build the connector objects
                 for connector in connectors {
@@ -75,14 +84,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     let port_path = format!("{0}/{1}", gpu_path, name);
                     connection.object_server().at(port_path, connector).await?;
                 }
-            },
+            }
         };
     }
 
     // Request a name
-    connection
-        .request_name(BUS_NAME)
-        .await?;
+    connection.request_name(BUS_NAME).await?;
 
     // Do other things or go to wait forever
     pending::<()>().await;
