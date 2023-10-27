@@ -735,18 +735,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "lightning-bus"
-version = "0.1.0"
-dependencies = [
- "libryzenadj",
- "log",
- "simple_logger",
- "tokio",
- "zbus",
- "zbus_macros",
-]
-
-[[package]]
 name = "linux-raw-sys"
 version = "0.3.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1012,6 +1000,18 @@ name = "powerfmt"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "439ee305def115ba05938db6eb1644ff94165c5ab5e9420d1c1bcedbba909391"
+
+[[package]]
+name = "powerstation"
+version = "0.1.0"
+dependencies = [
+ "libryzenadj",
+ "log",
+ "simple_logger",
+ "tokio",
+ "zbus",
+ "zbus_macros",
+]
 
 [[package]]
 name = "ppv-lite86"

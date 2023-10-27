@@ -1,4 +1,4 @@
-# Lightning Bus
+# PowerStation
 
 Open source performance daemon with DBus interface
 
@@ -13,14 +13,14 @@ sudo make install
 
 ## Usage
 
-When LightningBus is running as a service, you can interact with it over DBus.
+When PowerStation is running as a service, you can interact with it over DBus.
 There are various DBus libraries available for popular programming languages
 like Python, Rust, C++, etc.
 
 You can also interface with DBus using the `busctl` command:
 
 ```bash
-busctl tree org.shadowblip.LightningBus
+busctl tree org.shadowblip.PowerStation
 ```
 
 ```bash
@@ -51,7 +51,7 @@ busctl tree org.shadowblip.LightningBus
 ```
 
 ```bash
-busctl introspect org.shadowblip.LightningBus /org/shadowblip/Performance/GPU/Card2
+busctl introspect org.shadowblip.PowerStation /org/shadowblip/Performance/GPU/Card2
 ```
 
 ```bash
@@ -91,7 +91,7 @@ org.shadowblip.GPU                  interface -         -                      -
 When running, you can test setting properties with:
 
 ```bash
-busctl set-property org.shadowblip.LightningBus /org/shadowblip/Performance/CPU/Core11 org.shadowblip.CPU.Core Online "b" False
+busctl set-property org.shadowblip.PowerStation /org/shadowblip/Performance/CPU/Core11 org.shadowblip.CPU.Core Online "b" False
 ```
 
 ## References

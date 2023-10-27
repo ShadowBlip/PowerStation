@@ -7,7 +7,7 @@ use crate::performance::gpu::{self, GraphicsCard};
 
 mod performance;
 
-const BUS_NAME: &str = "org.shadowblip.LightningBus";
+const BUS_NAME: &str = "org.shadowblip.PowerStation";
 const PREFIX: &str = "/org/shadowblip/Performance";
 
 trait TitleCase {
@@ -27,7 +27,7 @@ impl TitleCase for &str {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     SimpleLogger::new().init().unwrap();
-    log::info!("Starting LightningBus");
+    log::info!("Starting PowerStation");
 
     // Discover all CPUs
     let cpu = cpu::CPU::new();
