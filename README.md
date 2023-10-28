@@ -1,4 +1,17 @@
-# PowerStation
+<h1 align="center">
+  <img src="https://raw.githubusercontent.com/ShadowBlip/PowerStation/main/icon.svg" alt="PowerStation Logo" width="200">
+  <br>
+  PowerStation
+</h1>
+
+<p align="center">
+  <a href="https://github.com/ShadowBlip/PowerStation/stargazers"><img src="https://img.shields.io/github/stars/ShadowBlip/PowerStation" /></a>
+  <a href="https://github.com/ShadowBlip/PowerStation/blob/main/LICENSE"><img src="https://img.shields.io/github/license/ShadowBlip/PowerStation" /></a>
+  <a href="https://discord.gg/fKsUbrt"><img src="https://img.shields.io/badge/discord-server-%235865F2" /></a>
+  <br>
+</p>
+
+## About
 
 Open source performance daemon with DBus interface
 
@@ -9,6 +22,13 @@ You can install with:
 ```bash
 make build
 sudo make install
+```
+
+Then start the service with:
+
+```bash
+sudo systemctl enable powerstation
+sudo systemctl start powerstation
 ```
 
 ## Usage
