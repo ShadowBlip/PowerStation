@@ -52,33 +52,32 @@ async fn main() -> Result<(), Box<dyn Error>> {
     for gpu in gpus {
         match gpu {
             gpu::GPU::AMD(card) => {
+                // Build the DBus object path for this card
                 let card_name = card.name.clone().as_str().title();
                 let gpu_path = format!("{0}/GPU/{1}", PREFIX, card_name);
+
+                // Get the TDP interface from the card and serve it on DBus
+                let tdp = card.get_tdp_interface();
+                if tdp.is_some() {
+                    log::debug!("Discovered TDP interface on card: {}", card_name);
+                    let tdp = tdp.unwrap();
+                    connection.object_server().at(gpu_path.clone(), tdp).await?;
+                }
+
+                // Get GPU connectors from the card and serve them on DBus
                 let connectors = gpu::get_connectors(card.name.clone());
+                for connector in connectors {
+                    let name = connector.name.clone().replace("-", "/");
+                    let port_path = format!("{0}/{1}", gpu_path, name);
+                    log::debug!("Discovered connector on {}: {}", card_name, port_path);
+                    connection.object_server().at(port_path, connector).await?;
+                }
+
+                // Serve the GPU interface on DBus
                 connection
                     .object_server()
                     .at(gpu_path.clone(), card)
                     .await?;
-
-                // Add the TDP interface
-                let tdp = gpu::tdp::get_interface(gpu_path.clone(), String::from("AMD"));
-                if tdp.is_ok() {
-                    log::debug!("Discovered TDP implementation");
-                    let tdp = tdp.unwrap();
-                    match tdp {
-                        gpu::tdp::TDP::AMD(interface) => {
-                            connection.object_server().at(gpu_path.clone(), interface).await?;
-                        },
-                    }
-                }
-
-                // Build the connector objects
-                for connector in connectors {
-                    let name = connector.name.clone().replace("-", "/");
-                    let port_path = format!("{0}/{1}", gpu_path, name);
-                    log::debug!("Getting connector objects for: {}", port_path);
-                    connection.object_server().at(port_path, connector).await?;
-                }
             }
 
             gpu::GPU::Intel(card) => {
