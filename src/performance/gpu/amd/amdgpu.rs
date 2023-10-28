@@ -1,4 +1,3 @@
-use libryzenadj::RyzenAdj;
 use std::{
     fs::{self, OpenOptions},
     io::Write,
@@ -6,7 +5,7 @@ use std::{
 use zbus::fdo;
 use zbus_macros::dbus_interface;
 
-use crate::performance::gpu::GraphicsCard;
+use crate::performance::gpu::DBusInterface;
 
 pub struct AMDGPU {
     pub name: String,
@@ -25,7 +24,7 @@ pub struct AMDGPU {
 }
 
 #[dbus_interface(name = "org.shadowblip.GPU")]
-impl GraphicsCard for AMDGPU {
+impl DBusInterface for AMDGPU {
     #[dbus_interface(property)]
     fn name(&self) -> String {
         self.name.clone()

@@ -3,7 +3,7 @@ use std::{error::Error, future::pending};
 use zbus::Connection;
 
 use crate::performance::cpu::cpu;
-use crate::performance::gpu::{self, GraphicsCard};
+use crate::performance::gpu;
 
 mod performance;
 
@@ -52,13 +52,25 @@ async fn main() -> Result<(), Box<dyn Error>> {
     for gpu in gpus {
         match gpu {
             gpu::GPU::AMD(card) => {
-                let card_name = card.name().as_str().title();
+                let card_name = card.name.clone().as_str().title();
                 let gpu_path = format!("{0}/GPU/{1}", PREFIX, card_name);
-                let connectors = gpu::get_connectors(card.name());
+                let connectors = gpu::get_connectors(card.name.clone());
                 connection
                     .object_server()
                     .at(gpu_path.clone(), card)
                     .await?;
+
+                // Add the TDP interface
+                let tdp = gpu::tdp::get_interface(gpu_path.clone(), String::from("AMD"));
+                if tdp.is_ok() {
+                    log::debug!("Discovered TDP implementation");
+                    let tdp = tdp.unwrap();
+                    match tdp {
+                        gpu::tdp::TDP::AMD(interface) => {
+                            connection.object_server().at(gpu_path.clone(), interface).await?;
+                        },
+                    }
+                }
 
                 // Build the connector objects
                 for connector in connectors {
@@ -70,9 +82,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
             }
 
             gpu::GPU::Intel(card) => {
-                let card_name = card.name().as_str().title();
+                let card_name = card.name.clone().as_str().title();
                 let gpu_path = format!("{0}/GPU/{1}", PREFIX, card_name);
-                let connectors = gpu::get_connectors(card.name());
+                let connectors = gpu::get_connectors(card.name.clone());
                 connection
                     .object_server()
                     .at(gpu_path.clone(), card)

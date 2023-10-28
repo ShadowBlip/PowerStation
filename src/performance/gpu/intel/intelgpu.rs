@@ -6,7 +6,7 @@ use std::{
 use zbus::fdo;
 use zbus_macros::dbus_interface;
 
-use crate::performance::gpu::GraphicsCard;
+use crate::performance::gpu::DBusInterface;
 
 pub struct IntelGPU {
     pub name: String,
@@ -26,7 +26,7 @@ pub struct IntelGPU {
 }
 
 #[dbus_interface(name = "org.shadowblip.GPU")]
-impl GraphicsCard for IntelGPU {
+impl DBusInterface for IntelGPU {
     #[dbus_interface(property)]
     fn name(&self) -> String {
         self.name.clone()

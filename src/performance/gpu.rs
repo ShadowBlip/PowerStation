@@ -6,15 +6,24 @@ use crate::performance::gpu::amd::amdgpu::AMDGPU;
 use crate::performance::gpu::connector::Connector;
 use crate::performance::gpu::intel::intelgpu::IntelGPU;
 
-pub mod amd;
 pub mod connector;
+pub mod tdp;
+
+pub mod amd;
 pub mod intel;
 
 const DRM_PATH: &str = "/sys/class/drm";
 const PCI_IDS_PATH: &str = "/usr/share/hwdata/pci.ids";
 
+/// Container for different types of supported GPUs
+/// https://stackoverflow.com/questions/53216593/vec-of-generics-of-different-concrete-types
+pub enum GPU {
+    AMD(AMDGPU),
+    Intel(IntelGPU),
+}
+
 /// Represents the data contained in /sys/class/drm/cardX
-pub trait GraphicsCard {
+pub trait DBusInterface {
     fn name(&self) -> String;
     fn path(&self) -> String;
     fn class(&self) -> String;
@@ -35,13 +44,6 @@ pub trait GraphicsCard {
     fn set_clock_value_mhz_min(&mut self, value: f64) -> fdo::Result<()>;
     fn clock_value_mhz_max(&self) -> fdo::Result<f64>;
     fn set_clock_value_mhz_max(&mut self, value: f64) -> fdo::Result<()>;
-}
-
-/// Container for different types of supported GPUs
-/// https://stackoverflow.com/questions/53216593/vec-of-generics-of-different-concrete-types
-pub enum GPU {
-    AMD(AMDGPU),
-    Intel(IntelGPU),
 }
 
 /// Returns a list of all detected gpu devices
