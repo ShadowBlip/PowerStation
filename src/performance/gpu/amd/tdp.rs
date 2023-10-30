@@ -49,9 +49,37 @@ impl TDP {
         return Ok(lock);
     }
 
+    /// Set the current Slow PPT limit using ryzenadj
+    fn set_ppt_limit_slow(&mut self, value: u32) -> Result<(), String> {
+        log::debug!("Setting slow ppt limit to {}", value);
+        let lock = self.acquire_ryzenadj()?;
+        match lock.set_slow_limit(value) {
+            Ok(x) => return Ok(x),
+            Err(e) => {
+                let err = format!("Failed to set slow ppt limit: {}", e);
+                log::error!("{}", err);
+                return Err(String::from(err));
+            }
+        }
+    }
+
+    //// Get the PPT slow limit
+    //fn get_ppt_limit_slow(&self) -> Result<f32, String> {
+    //    log::debug!("Getting ppt slow limit");
+    //    let lock = self.acquire_ryzenadj()?;
+    //    match lock.get_slow_limit() {
+    //        Ok(x) => Ok(x),
+    //        Err(e) => {
+    //            let err = format!("Failed to get ppt slow limit: {}", e);
+    //            log::error!("{}", err);
+    //            Err(String::from(err))
+    //        }
+    //    }
+    //}
+
     /// Set the current Fast PPT limit using ryzenadj
     fn set_ppt_limit_fast(&mut self, value: u32) -> Result<(), String> {
-        log::debug!("Setting stapm limit to {}", value);
+        log::debug!("Setting fast ppt limit to {}", value);
         let lock = self.acquire_ryzenadj()?;
         match lock.set_fast_limit(value) {
             Ok(x) => return Ok(x),
@@ -147,6 +175,10 @@ impl DBusInterface for TDP {
         // Update the STAPM limit with the TDP value
         let limit: u32 = (value * 1000.0) as u32;
         TDP::set_stapm_limit(self, limit).map_err(|err| fdo::Error::Failed(String::from(err)))?;
+
+        // Also update the slow PPT limit
+        TDP::set_ppt_limit_slow(self, limit)
+            .map_err(|err| fdo::Error::Failed(String::from(err)))?;
 
         // After successfully setting the STAPM limit, we also need to adjust the
         // Fast PPT Limit accordingly so it is *boost* distance away.
