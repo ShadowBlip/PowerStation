@@ -67,20 +67,31 @@ async fn main() -> Result<(), Box<dyn Error>> {
             }
 
             gpu::GPU::Intel(card) => {
+                // Build the DBus object path for this card
                 let card_name = card.name.clone().as_str().title();
                 let gpu_path = format!("{0}/GPU/{1}", PREFIX, card_name);
-                let connectors = gpu::get_connectors(card.name.clone());
-                connection
-                    .object_server()
-                    .at(gpu_path.clone(), card)
-                    .await?;
 
-                // Build the connector objects
+                // Get the TDP interface from the card and serve it on DBus
+                let tdp = card.get_tdp_interface();
+                if tdp.is_some() {
+                    log::debug!("Discovered TDP interface on card: {}", card_name);
+                    let tdp = tdp.unwrap();
+                    connection.object_server().at(gpu_path.clone(), tdp).await?;
+                }
+
+                // Get GPU connectors from the card and serve them on DBus
+                let connectors = gpu::get_connectors(card.name.clone());
                 for connector in connectors {
                     let name = connector.name.clone().replace("-", "/");
                     let port_path = format!("{0}/{1}", gpu_path, name);
                     connection.object_server().at(port_path, connector).await?;
                 }
+
+                // Serve the GPU interface on DBus
+                connection
+                    .object_server()
+                    .at(gpu_path.clone(), card)
+                    .await?;
             }
         };
     }

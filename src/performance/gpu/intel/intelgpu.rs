@@ -6,6 +6,7 @@ use std::{
 use zbus::fdo;
 use zbus_macros::dbus_interface;
 
+use crate::performance::gpu::intel;
 use crate::performance::gpu::DBusInterface;
 
 pub struct IntelGPU {
@@ -23,6 +24,16 @@ pub struct IntelGPU {
     pub subvendor_id: String,
     pub revision_id: String,
     pub manual_clock: bool,
+}
+
+impl IntelGPU {
+    /// Returns the TDP DBus interface for this GPU
+    pub fn get_tdp_interface(&self) -> Option<intel::tdp::TDP> {
+        match self.class.as_str() {
+            "integrated" => Some(intel::tdp::TDP::new(self.path.clone())),
+            _ => None,
+        }
+    }
 }
 
 #[dbus_interface(name = "org.shadowblip.GPU")]
