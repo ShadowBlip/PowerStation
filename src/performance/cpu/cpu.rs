@@ -188,10 +188,10 @@ impl CPU {
                     continue;
                 }
                 let should_enable = enabled_count < num;
-                core.set_online_async(should_enable).await.map_err(|err| fdo::Error::IOError(err.to_string()))?;
                 if should_enable {
                     enabled_count += 1;
                 }
+                core.set_online_async(should_enable).await.map_err(|err| fdo::Error::IOError(err.to_string()))?;
             }
         }
 
