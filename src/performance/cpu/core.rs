@@ -25,7 +25,7 @@ impl CPUCore {
     // Returns the core ID of the CPU core. This ID will be identical for
     // hyperthread cores.
     #[dbus_interface(property)]
-    async fn core_id(&self) -> fdo::Result<u32> {
+    pub fn core_id(&self) -> fdo::Result<u32> {
         let path = format!("{0}/topology/core_id", self.path);
         let result = fs::read_to_string(path);
         let id = result
@@ -45,7 +45,7 @@ impl CPUCore {
 
     // Returns true if the given core is online
     #[dbus_interface(property)]
-    async fn online(&self) -> fdo::Result<bool> {
+    pub fn online(&self) -> fdo::Result<bool> {
         if self.number == 0 {
             return Ok(true);
         }
@@ -62,8 +62,13 @@ impl CPUCore {
 
     // Sets the given core to online
     #[dbus_interface(property)]
-    async fn set_online(&mut self, enabled: bool) -> fdo::Result<()> {
+    pub fn set_online(&mut self, enabled: bool) -> fdo::Result<()> {
+        let enabled_str = if enabled { "enabled" } else { "disabled" };
+        log::info!("Setting core {} to {}", self.number, enabled_str);
         let status = if enabled { "1" } else { "0" };
+        if self.number == 0 {
+            return Ok(());
+        }
 
         // Open the sysfs file to write to
         let path = format!("{0}/online", self.path);

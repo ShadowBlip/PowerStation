@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::{
     fs::{self, OpenOptions},
     io::Write,
@@ -13,12 +14,41 @@ const SMT_PATH: &str = "/sys/devices/system/cpu/smt/control";
 const BOOST_PATH: &str = "/sys/devices/system/cpu/cpufreq/boost";
 
 // Instance of the CPU on the host machine
-pub struct CPU {}
+pub struct CPU {
+    core_map: HashMap<u32, Vec<CPUCore>>,
+    core_count: u32,
+}
 
 impl CPU {
     // Returns a new CPU instance
     pub fn new() -> CPU {
-        CPU {}
+        // Create a hashmap to organize the cores by their core ID
+        let mut core_map: HashMap<u32, Vec<CPUCore>> = HashMap::new();
+        let mut cores = get_cores();
+
+        // Ensure all cores are online
+        for core in cores.iter_mut() {
+            let _ = core.set_online(true);
+        }
+
+        // Organize cores by core id
+        let mut core_count = 0;
+        for core in cores {
+            core_count += 1;
+            let core_id = core.core_id().unwrap();
+            if core_map.get(&core_id).is_none() {
+                let list: Vec<CPUCore> = Vec::new();
+                core_map.insert(core_id, list);
+            }
+
+            let list = core_map.get_mut(&core_id).unwrap();
+            list.push(core);
+        }
+
+        CPU {
+            core_map,
+            core_count,
+        }
     }
 }
 
@@ -103,6 +133,69 @@ impl CPU {
     #[dbus_interface(property)]
     pub fn features(&self) -> fdo::Result<Vec<String>> {
         return get_features();
+    }
+
+    #[dbus_interface(property)]
+    pub fn cores_enabled(&self) -> fdo::Result<u32> {
+        let mut count = 0;
+        for core_list in self.core_map.values() {
+            for core in core_list {
+                let is_online = core.online()?;
+                if is_online {
+                    count += 1;
+                }
+            }
+        }
+        return Ok(count);
+    }
+
+    #[dbus_interface(property)]
+    pub fn set_cores_enabled(&mut self, num: u32) -> fdo::Result<()> {
+        log::info!("Setting core count to {}", num);
+        if num < 1 {
+            return Err(fdo::Error::InvalidArgs(String::from(
+                "Cowardly refusing to set core count to 0",
+            )));
+        }
+
+        let core_count = self.core_count;
+        if num > core_count {
+            log::warn!(
+                "Unable to set enabled cores to {}. Maximum core count is {}. Enabling all cores.",
+                num,
+                core_count
+            );
+        }
+        let smt_enabled = self.smt_enabled()?;
+
+        // If SMT is not enabled and the given core number is greater than what
+        // cores would be available, then just set it to half the core count
+        let num = if !smt_enabled && num > (core_count / 2) {
+            log::warn!(
+                "Unable to set enabled cores to {} while SMT is disabled. Enabling all physical cores.",
+                num
+            );
+            core_count / 2
+        } else {
+            num
+        };
+
+        // Enable/disable cores based on their hyper-threaded sibling
+        let mut enabled_count = 1;
+        for core_list in self.core_map.values_mut() {
+            for core in core_list.iter_mut() {
+                if core.number == 0 {
+                    continue;
+                }
+                let should_enable = enabled_count < num;
+                core.set_online(should_enable)?;
+                if should_enable {
+                    enabled_count += 1;
+                }
+            }
+        }
+
+        Ok(())
     }
 }
 
