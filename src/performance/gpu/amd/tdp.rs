@@ -133,6 +133,20 @@ impl TDP {
         }
     }
 
+    // Sets the thermal limit value using ryzenadj
+    fn set_thm_limit(&mut self, value: u32) -> Result<(), String> {
+        log::debug!("Setting thm limit to: {}", value);
+        let lock = self.acquire_ryzenadj()?;
+        match lock.set_tctl_temp(value) {
+            Ok(x) => Ok(x),
+            Err(e) => {
+                let err = format!("Failed to set tctl limit: {}", e);
+                log::error!("{}", err);
+                Err(String::from(err))
+            }
+        }
+    }
+
     /// Returns the current thermal limit value using ryzenadj
     fn get_thm_limit(&self) -> Result<f32, String> {
         log::debug!("Getting thm limit");
@@ -226,20 +240,15 @@ impl DBusInterface for TDP {
         return Ok(());
     }
 
-    fn thermal_profile(&self) -> fdo::Result<u32> {
-        todo!();
-    }
-
-    fn set_thermal_profile(&mut self, _profile: u32) -> fdo::Result<()> {
-        todo!();
-    }
-
+    #[dbus_interface(property)]
     fn thermal_throttle_limit_c(&self) -> fdo::Result<f64> {
         let limit = TDP::get_thm_limit(&self).map_err(|err| fdo::Error::Failed(err.to_string()))?;
         return Ok(limit.into());
     }
 
-    fn set_thermal_throttle_limit_c(&mut self, _limit: f64) -> fdo::Result<()> {
-        todo!();
+    #[dbus_interface(property)]
+    fn set_thermal_throttle_limit_c(&mut self, limit: f64) -> fdo::Result<()> {
+        let limit = limit as u32;
+        TDP::set_thm_limit(self, limit).map_err(|err| fdo::Error::Failed(err.to_string()))
     }
 }

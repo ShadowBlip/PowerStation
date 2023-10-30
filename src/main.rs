@@ -10,20 +10,6 @@ mod performance;
 const BUS_NAME: &str = "org.shadowblip.PowerStation";
 const PREFIX: &str = "/org/shadowblip/Performance";
 
-trait TitleCase {
-    fn title(&self) -> String;
-}
-
-impl TitleCase for &str {
-    fn title(&self) -> String {
-        if !self.is_ascii() || self.is_empty() {
-            return String::from(*self);
-        }
-        let (head, tail) = self.split_at(1);
-        head.to_uppercase() + tail
-    }
-}
-
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     SimpleLogger::new().init().unwrap();
@@ -107,3 +93,19 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     Ok(())
 }
+
+trait TitleCase {
+    fn title(&self) -> String;
+}
+
+impl TitleCase for &str {
+    fn title(&self) -> String {
+        if !self.is_ascii() || self.is_empty() {
+            return String::from(*self);
+        }
+        let (head, tail) = self.split_at(1);
+        head.to_uppercase() + tail
+    }
+}
+
+
