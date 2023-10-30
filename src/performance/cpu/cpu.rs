@@ -9,7 +9,7 @@ use zbus_macros::dbus_interface;
 use crate::performance::cpu::core::CPUCore;
 
 // Path to discover the number of CPUs the system has
-const CPUID_PATH: &str = "/sys/class/cpuid";
+const CPUID_PATH: &str = "/sys/bus/cpu/devices";
 const SMT_PATH: &str = "/sys/devices/system/cpu/smt/control";
 const BOOST_PATH: &str = "/sys/devices/system/cpu/cpufreq/boost";
 
@@ -150,7 +150,7 @@ impl CPU {
     }
 
     #[dbus_interface(property)]
-    pub fn set_cores_enabled(&mut self, num: u32) -> fdo::Result<()> {
+    pub async fn set_cores_enabled(&mut self, num: u32) -> fdo::Result<()> {
         log::info!("Setting core count to {}", num);
         if num < 1 {
             return Err(fdo::Error::InvalidArgs(String::from(
@@ -188,7 +188,7 @@ impl CPU {
                     continue;
                 }
                 let should_enable = enabled_count < num;
-                core.set_online(should_enable)?;
+                core.set_online_async(should_enable).await.map_err(|err| fdo::Error::IOError(err.to_string()))?;
                 if should_enable {
                     enabled_count += 1;
                 }
@@ -247,10 +247,7 @@ pub fn get_cores() -> Vec<CPUCore> {
     for path in paths {
         log::info!("Discovered core: {}", path.unwrap().path().display());
         let core_path = format!("/sys/bus/cpu/devices/cpu{0}", i);
-        let core = CPUCore {
-            number: i,
-            path: core_path,
-        };
+        let core = CPUCore::new(i, core_path);
         cores.push(core);
         i += 1;
     }

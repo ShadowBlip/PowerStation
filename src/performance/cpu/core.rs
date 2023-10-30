@@ -2,6 +2,7 @@ use std::{
     fs::{self, OpenOptions},
     io::Write,
 };
+use tokio::io::AsyncWriteExt;
 use zbus::fdo;
 use zbus_macros::dbus_interface;
 
@@ -12,6 +13,33 @@ pub struct CPUCore {
     // sysfs path to the CPU core
     // E.g. /sys/bus/cpu/devices/cpu{}
     pub path: String,
+}
+
+impl CPUCore {
+    pub fn new(number: u32, path: String) -> CPUCore {
+        CPUCore { number, path }
+    }
+
+    /// Asyncronously set the core to online
+    pub async fn set_online_async(&self, enabled: bool) -> Result<(), std::io::Error> {
+        let enabled_str = if enabled { "enabled" } else { "disabled" };
+        log::info!("Setting core {} to {}", self.number, enabled_str);
+        let status = if enabled { "1" } else { "0" };
+        if self.number == 0 {
+            return Ok(());
+        }
+
+        // Open the sysfs file to write to
+        let path = format!("{0}/online", self.path);
+        let mut options = tokio::fs::OpenOptions::new();
+        let file = options.write(true).open(path);
+
+        // Write the value
+        file.await?
+            .write_all(status.as_bytes()).await?;
+
+        Ok(())
+    }
 }
 
 #[dbus_interface(name = "org.shadowblip.CPU.Core")]
