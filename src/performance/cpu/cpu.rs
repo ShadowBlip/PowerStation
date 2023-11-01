@@ -180,9 +180,14 @@ impl CPU {
             num
         };
 
+        // Collect all core IDs from the core map
+        let mut core_ids = self.core_map.keys().cloned().collect::<Vec<u32>>();
+        core_ids.sort();
+
         // Enable/disable cores based on their hyper-threaded sibling
         let mut enabled_count = 1;
-        for core_list in self.core_map.values_mut() {
+        for core_id in core_ids {
+            let core_list = self.core_map.get_mut(&core_id).unwrap();
             for core in core_list.iter_mut() {
                 if core.number == 0 {
                     continue;
