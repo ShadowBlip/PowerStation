@@ -148,4 +148,18 @@ impl DBusInterface for TDP {
             "Thermal throttling not supported",
         )))
     }
+
+    #[dbus_interface(property)]
+    fn power_profile(&self) -> fdo::Result<String> {
+        Err(fdo::Error::NotSupported(String::from(
+            "Power profiles not supported",
+        )))
+    }
+
+    #[dbus_interface(property)]
+    fn set_power_profile(&mut self, _profile: String) -> fdo::Result<()> {
+        Err(fdo::Error::NotSupported(String::from(
+            "Power profiles not supported",
+        )))
+    }
 }
