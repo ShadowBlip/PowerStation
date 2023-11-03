@@ -1,6 +1,6 @@
 # Build and publish a release of PowerStation using semantic-release whenever
 # changes are merged into main.
-name: "Release"
+name: "🎉 Release"
 
 on:
   push:
@@ -15,6 +15,7 @@ on:
 # Jobs to run
 jobs:
   release:
+    name: Publish
     runs-on: ubuntu-latest
 
     steps:
@@ -32,4 +33,4 @@ jobs:
       - name: Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: make release
+        run: make sem-release
