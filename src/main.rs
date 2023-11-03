@@ -105,10 +105,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Create a GPU Bus instance which allows card enumeration
     let gpu_bus = gpu::GPUBus::new(gpu_obj_paths);
-    connection
-        .object_server()
-        .at(GPU_PATH.clone(), gpu_bus)
-        .await?;
+    connection.object_server().at(GPU_PATH, gpu_bus).await?;
 
     // Request a name
     connection.request_name(BUS_NAME).await?;

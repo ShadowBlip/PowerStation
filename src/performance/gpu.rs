@@ -187,13 +187,7 @@ pub fn get_gpu(path: String) -> Result<GPU, std::io::Error> {
         }
 
         if line_clean.starts_with(&device_id) {
-            device = Some(
-                line_clean
-                    .clone()
-                    .trim_start_matches(&device_id)
-                    .trim()
-                    .to_string(),
-            );
+            device = Some(line_clean.trim_start_matches(&device_id).trim().to_string());
             log::debug!("Found device name: {}", device.clone().unwrap());
         }
 
@@ -204,13 +198,7 @@ pub fn get_gpu(path: String) -> Result<GPU, std::io::Error> {
 
         let prefix = format!("{0} {1}", subvendor_id, subdevice_id);
         if line_clean.starts_with(&prefix) {
-            subdevice = Some(
-                line_clean
-                    .clone()
-                    .trim_start_matches(&prefix)
-                    .trim()
-                    .to_string(),
-            );
+            subdevice = Some(line_clean.trim_start_matches(&prefix).trim().to_string());
             log::debug!("Found subdevice name: {}", subdevice.clone().unwrap());
             break;
         }

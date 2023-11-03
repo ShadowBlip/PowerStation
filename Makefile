@@ -1,5 +1,10 @@
 ALL_RS := $(shell find src -name '*.rs')
 PREFIX ?= /usr
+CACHE_DIR := .cache
+
+# Docker image variables
+IMAGE_NAME ?= rust-cmake
+IMAGE_TAG ?= latest
 
 ##@ General
 
@@ -26,7 +31,9 @@ install: build ## Install PowerStation to the given prefix (default: PREFIX=/usr
 		$(PREFIX)/share/dbus-1/system.d/org.shadowblip.PowerStation.conf
 	install -D -m 644 rootfs/usr/lib/systemd/system/powerstation.service \
 		$(PREFIX)/lib/systemd/system/powerstation.service
+ifndef NO_RELOAD
 	systemctl reload dbus
+endif
 
 .PHONY: uninstall
 uninstall: ## Uninstall PowerStation
@@ -56,6 +63,8 @@ run: setup debug ## Build and run
 .PHONY: clean
 clean: ## Remove build artifacts
 	rm -rf target
+	rm -rf .cache
+	rm -rf dist
 
 .PHONY: format
 format: ## Run rustfmt on all source files
@@ -63,7 +72,41 @@ format: ## Run rustfmt on all source files
 
 .PHONY: setup
 setup: /usr/share/dbus-1/system.d/org.shadowblip.PowerStation.conf ## Install dbus policies
-/usr/share/dbus-1/system.d/org.shadowblip.PowerStation.conf:
+/usr/share/dbus-1/system.d/org.shadowblip.P$(CACHE_DIR)/owerStation.conf:
 	sudo ln $(PWD)/rootfs/usr/share/dbus-1/system.d/org.shadowblip.PowerStation.conf \
 		/usr/share/dbus-1/system.d/org.shadowblip.PowerStation.conf
 	sudo systemctl reload dbus
+
+##@ Distribution
+
+.PHONY: dist
+dist: dist/powerstation.tar.gz ## Build a redistributable archive of the project
+dist/powerstation.tar.gz: build
+	rm -rf $(CACHE_DIR)/powerstation
+	mkdir -p $(CACHE_DIR)/powerstation
+	$(MAKE) install PREFIX=$(CACHE_DIR)/powerstation/usr NO_RELOAD=true
+	mkdir -p dist
+	tar cvfz $@ -C $(CACHE_DIR) powerstation
+
+# Refer to .releaserc.yaml for release configuration
+.PHONY: sem-release 
+sem-release: ## Publish a release with semantic release 
+	npx semantic-release
+
+# Build the docker container for running in docker
+.PHONY: docker-builder
+docker-builder:
+	docker build -t $(IMAGE_NAME):$(IMAGE_TAG) .
+
+# E.g. make in-docker TARGET=build
+.PHONY: in-docker
+in-docker: docker-builder
+	@# Run the given make target inside Docker
+	docker run --rm \
+		-v $(PWD):/src \
+		--workdir /src \
+		-e HOME=/home/build \
+		--user $(shell id -u):$(shell id -g) \
+		$(IMAGE_NAME):$(IMAGE_TAG) \
+		make $(TARGET)
+
