@@ -46,6 +46,7 @@ pub trait DBusInterface {
     fn set_clock_value_mhz_min(&mut self, value: f64) -> fdo::Result<()>;
     fn clock_value_mhz_max(&self) -> fdo::Result<f64>;
     fn set_clock_value_mhz_max(&mut self, value: f64) -> fdo::Result<()>;
+    fn enumerate_connectors(&self) -> fdo::Result<Vec<ObjectPath>>;
 }
 
 /// Used to enumerate all GPU cards over DBus
@@ -231,6 +232,7 @@ pub fn get_gpu(path: String) -> Result<GPU, std::io::Error> {
         | "AuthenticAMD Advanced Micro Devices, Inc."
         | "Advanced Micro Devices, Inc. [AMD/ATI]" => {
             let gpu = AMDGPU {
+                connector_paths: Vec::new(),
                 name: filename.to_string(),
                 path: path.clone(),
                 class: class.to_string(),
@@ -250,6 +252,7 @@ pub fn get_gpu(path: String) -> Result<GPU, std::io::Error> {
         // Intel Implementation
         "Intel" | "GenuineIntel" | "Intel Corporation" => {
             let gpu = IntelGPU {
+                connector_paths: Vec::new(),
                 name: filename.to_string(),
                 path: path.clone(),
                 class: class.to_string(),

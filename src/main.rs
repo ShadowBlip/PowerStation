@@ -36,7 +36,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // TODO: There must be a better way to do this
     for gpu in gpus {
         match gpu {
-            gpu::GPU::AMD(card) => {
+            gpu::GPU::AMD(mut card) => {
                 // Build the DBus object path for this card
                 let card_name = card.name.clone().as_str().title();
                 let gpu_path = format!("{0}/{1}", GPU_PATH, card_name);
@@ -51,13 +51,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 }
 
                 // Get GPU connectors from the card and serve them on DBus
+                let mut connector_paths: Vec<String> = Vec::new();
                 let connectors = gpu::get_connectors(card.name.clone());
                 for connector in connectors {
                     let name = connector.name.clone().replace("-", "/");
                     let port_path = format!("{0}/{1}", gpu_path, name);
+                    connector_paths.push(port_path.clone());
                     log::debug!("Discovered connector on {}: {}", card_name, port_path);
                     connection.object_server().at(port_path, connector).await?;
                 }
+                card.connector_paths = connector_paths;
 
                 // Serve the GPU interface on DBus
                 connection
@@ -66,7 +69,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     .await?;
             }
 
-            gpu::GPU::Intel(card) => {
+            gpu::GPU::Intel(mut card) => {
                 // Build the DBus object path for this card
                 let card_name = card.name.clone().as_str().title();
                 let gpu_path = format!("{0}/GPU/{1}", PREFIX, card_name);
@@ -81,12 +84,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 }
 
                 // Get GPU connectors from the card and serve them on DBus
+                let mut connector_paths: Vec<String> = Vec::new();
                 let connectors = gpu::get_connectors(card.name.clone());
                 for connector in connectors {
                     let name = connector.name.clone().replace("-", "/");
                     let port_path = format!("{0}/{1}", gpu_path, name);
+                    connector_paths.push(port_path.clone());
                     connection.object_server().at(port_path, connector).await?;
                 }
+                card.connector_paths = connector_paths;
 
                 // Serve the GPU interface on DBus
                 connection

@@ -3,13 +3,14 @@ use std::{
     io::Write,
 };
 
-use zbus::fdo;
+use zbus::{fdo, zvariant::ObjectPath};
 use zbus_macros::dbus_interface;
 
 use crate::performance::gpu::intel;
 use crate::performance::gpu::DBusInterface;
 
 pub struct IntelGPU {
+    pub connector_paths: Vec<String>,
     pub name: String,
     pub path: String,
     pub class: String,
@@ -38,6 +39,18 @@ impl IntelGPU {
 
 #[dbus_interface(name = "org.shadowblip.GPU.Card")]
 impl DBusInterface for IntelGPU {
+    /// Returns a list of DBus paths to all connectors
+    fn enumerate_connectors(&self) -> fdo::Result<Vec<ObjectPath>> {
+        let mut paths: Vec<ObjectPath> = Vec::new();
+
+        for path in &self.connector_paths {
+            let path = ObjectPath::from_string_unchecked(path.clone());
+            paths.push(path);
+        }
+
+        return Ok(paths);
+    }
+
     #[dbus_interface(property)]
     fn name(&self) -> String {
         self.name.clone()
