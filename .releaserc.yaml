@@ -21,7 +21,7 @@ plugins:
     - replacements:
       - files:
           - Cargo.toml
-        from: "version = .*"
+        from: "^version = .*\"$"
         to: "version = \"${nextRelease.version}\""
         #results:
         #  - file: Cargo.toml
