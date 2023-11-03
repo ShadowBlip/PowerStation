@@ -1,6 +1,8 @@
 use std::fs::{self, File};
 use std::io::{prelude::*, BufReader};
 use zbus::fdo;
+use zbus::zvariant::ObjectPath;
+use zbus_macros::dbus_interface;
 
 use crate::performance::gpu::amd::amdgpu::AMDGPU;
 use crate::performance::gpu::connector::Connector;
@@ -44,6 +46,35 @@ pub trait DBusInterface {
     fn set_clock_value_mhz_min(&mut self, value: f64) -> fdo::Result<()>;
     fn clock_value_mhz_max(&self) -> fdo::Result<f64>;
     fn set_clock_value_mhz_max(&mut self, value: f64) -> fdo::Result<()>;
+}
+
+/// Used to enumerate all GPU cards over DBus
+pub struct GPUBus {
+    gpu_object_paths: Vec<String>,
+}
+
+impl GPUBus {
+    /// Return a new instance of the GPU Bus
+    pub fn new(gpu_paths: Vec<String>) -> GPUBus {
+        GPUBus {
+            gpu_object_paths: gpu_paths,
+        }
+    }
+}
+
+#[dbus_interface(name = "org.shadowblip.GPU")]
+impl GPUBus {
+    /// Returns a list of DBus paths to all GPU cards
+    pub fn enumerate_cards(&self) -> fdo::Result<Vec<ObjectPath>> {
+        let mut paths: Vec<ObjectPath> = Vec::new();
+
+        for item in &self.gpu_object_paths {
+            let path = ObjectPath::from_string_unchecked(item.clone());
+            paths.push(path);
+        }
+
+        return Ok(paths);
+    }
 }
 
 /// Returns a list of all detected gpu devices

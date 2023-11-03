@@ -8,7 +8,7 @@ pub struct Connector {
     pub path: String,
 }
 
-#[dbus_interface(name = "org.shadowblip.GPU.Connector")]
+#[dbus_interface(name = "org.shadowblip.GPU.Card.Connector")]
 impl Connector {
     #[dbus_interface(property)]
     fn name(&self) -> String {

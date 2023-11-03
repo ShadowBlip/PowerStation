@@ -17,7 +17,7 @@ impl TDP {
     }
 }
 
-#[dbus_interface(name = "org.shadowblip.GPU.TDP")]
+#[dbus_interface(name = "org.shadowblip.GPU.Card.TDP")]
 impl DBusInterface for TDP {
     #[dbus_interface(property, name = "TDP")]
     fn tdp(&self) -> fdo::Result<f64> {

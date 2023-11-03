@@ -4,8 +4,10 @@ use std::{
     io::Write,
 };
 use zbus::fdo;
+use zbus::zvariant::ObjectPath;
 use zbus_macros::dbus_interface;
 
+use crate::constants::CPU_PATH;
 use crate::performance::cpu::core::CPUCore;
 
 // Path to discover the number of CPUs the system has
@@ -73,6 +75,7 @@ impl CPU {
     // Set whether or not boost is enabled
     #[dbus_interface(property)]
     pub fn set_boost_enabled(&mut self, enabled: bool) -> fdo::Result<()> {
+        log::info!("Setting boost enabled to {}", enabled);
         let status = if enabled { "1" } else { "0" };
 
         // Open the sysfs file to write to
@@ -108,7 +111,8 @@ impl CPU {
     // Set whether or not SMT is enabled
     #[dbus_interface(property)]
     pub fn set_smt_enabled(&mut self, enabled: bool) -> fdo::Result<()> {
-        let status = if enabled { "1" } else { "0" };
+        log::info!("Setting smt enabled to {}", enabled);
+        let status = if enabled { "on" } else { "off" };
 
         // Open the sysfs file to write to
         let file = OpenOptions::new().write(true).open(SMT_PATH);
@@ -124,15 +128,16 @@ impl CPU {
         Ok(())
     }
 
-    // Returns true if the CPU has the given feature flag.
-    pub fn has_feature(&mut self, flag: String) -> fdo::Result<bool> {
-        return has_feature(flag);
-    }
-
     // Returns a list of features that the CPU supports
     #[dbus_interface(property)]
     pub fn features(&self) -> fdo::Result<Vec<String>> {
         return get_features();
+    }
+
+    /// Returns the total number of CPU cores detected
+    #[dbus_interface(property)]
+    pub fn cores_count(&self) -> fdo::Result<u32> {
+        return Ok(self.core_count.clone());
     }
 
     #[dbus_interface(property)]
@@ -196,11 +201,31 @@ impl CPU {
                 if should_enable {
                     enabled_count += 1;
                 }
-                core.set_online_async(should_enable).await.map_err(|err| fdo::Error::IOError(err.to_string()))?;
+                core.set_online_async(should_enable)
+                    .await
+                    .map_err(|err| fdo::Error::IOError(err.to_string()))?;
             }
         }
 
         Ok(())
+    }
+
+    /// Returns a list of DBus paths to all CPU cores
+    pub fn enumerate_cores(&mut self) -> fdo::Result<Vec<ObjectPath>> {
+        let mut paths: Vec<ObjectPath> = Vec::new();
+
+        for i in 0..self.core_count {
+            let path = format!("{}/Core{1}", CPU_PATH, i);
+            let path = ObjectPath::from_string_unchecked(path);
+            paths.push(path);
+        }
+
+        return Ok(paths);
+    }
+
+    /// Returns true if the CPU has the given feature flag.
+    pub fn has_feature(&mut self, flag: String) -> fdo::Result<bool> {
+        return has_feature(flag);
     }
 }
 

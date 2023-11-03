@@ -157,7 +157,7 @@ impl TDP {
     }
 }
 
-#[dbus_interface(name = "org.shadowblip.GPU.TDP")]
+#[dbus_interface(name = "org.shadowblip.GPU.Card.TDP")]
 impl DBusInterface for TDP {
     /// Get the currently set TDP value
     #[dbus_interface(property, name = "TDP")]

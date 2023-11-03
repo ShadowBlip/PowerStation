@@ -2,13 +2,12 @@ use simple_logger::SimpleLogger;
 use std::{error::Error, future::pending};
 use zbus::Connection;
 
+use crate::constants::{BUS_NAME, CPU_PATH, GPU_PATH, PREFIX};
 use crate::performance::cpu::cpu;
 use crate::performance::gpu;
 
+mod constants;
 mod performance;
-
-const BUS_NAME: &str = "org.shadowblip.PowerStation";
-const PREFIX: &str = "/org/shadowblip/Performance";
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -26,21 +25,22 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let connection = Connection::system().await?;
 
     // Generate CPU objects to serve
-    let cpu_path = format!("{0}/CPU", PREFIX);
-    connection.object_server().at(cpu_path, cpu).await?;
+    connection.object_server().at(CPU_PATH, cpu).await?;
     for core in cores {
-        let core_path = format!("{0}/CPU/Core{1}", PREFIX, core.number());
+        let core_path = format!("{0}/Core{1}", CPU_PATH, core.number());
         connection.object_server().at(core_path, core).await?;
     }
 
     // Generate GPU objects to serve
+    let mut gpu_obj_paths: Vec<String> = Vec::new();
     // TODO: There must be a better way to do this
     for gpu in gpus {
         match gpu {
             gpu::GPU::AMD(card) => {
                 // Build the DBus object path for this card
                 let card_name = card.name.clone().as_str().title();
-                let gpu_path = format!("{0}/GPU/{1}", PREFIX, card_name);
+                let gpu_path = format!("{0}/{1}", GPU_PATH, card_name);
+                gpu_obj_paths.push(gpu_path.clone());
 
                 // Get the TDP interface from the card and serve it on DBus
                 let tdp = card.get_tdp_interface();
@@ -70,6 +70,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 // Build the DBus object path for this card
                 let card_name = card.name.clone().as_str().title();
                 let gpu_path = format!("{0}/GPU/{1}", PREFIX, card_name);
+                gpu_obj_paths.push(gpu_path.clone());
 
                 // Get the TDP interface from the card and serve it on DBus
                 let tdp = card.get_tdp_interface();
@@ -96,6 +97,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
         };
     }
 
+    // Create a GPU Bus instance which allows card enumeration
+    let gpu_bus = gpu::GPUBus::new(gpu_obj_paths);
+    connection
+        .object_server()
+        .at(GPU_PATH.clone(), gpu_bus)
+        .await?;
+
     // Request a name
     connection.request_name(BUS_NAME).await?;
 
@@ -118,5 +126,3 @@ impl TitleCase for &str {
         head.to_uppercase() + tail
     }
 }
-
-

@@ -34,7 +34,7 @@ impl AMDGPU {
     }
 }
 
-#[dbus_interface(name = "org.shadowblip.GPU")]
+#[dbus_interface(name = "org.shadowblip.GPU.Card")]
 impl DBusInterface for AMDGPU {
     #[dbus_interface(property)]
     fn name(&self) -> String {

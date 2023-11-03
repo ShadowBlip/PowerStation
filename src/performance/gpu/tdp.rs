@@ -1,6 +1,6 @@
 use zbus::fdo;
 
-/// [DBusInterface] is a TDP DBus implementation for "org.shadowblip.GPU.TDP"
+/// [DBusInterface] is a TDP DBus implementation for "org.shadowblip.GPU.Card.TDP"
 pub trait DBusInterface {
     fn tdp(&self) -> fdo::Result<f64>;
     fn set_tdp(&mut self, value: f64) -> fdo::Result<()>;
