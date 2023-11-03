@@ -60,6 +60,10 @@ all: build debug ## Build release and debug builds
 run: setup debug ## Build and run
 	sudo ./target/debug/powerstation
 
+.PHONY: test
+test: debug ## Build and run all tests
+	cargo test -- --show-output
+
 .PHONY: clean
 clean: ## Remove build artifacts
 	rm -rf target
@@ -87,6 +91,7 @@ dist/powerstation.tar.gz: build
 	$(MAKE) install PREFIX=$(CACHE_DIR)/powerstation/usr NO_RELOAD=true
 	mkdir -p dist
 	tar cvfz $@ -C $(CACHE_DIR) powerstation
+	cd dist && sha256sum powerstation.tar.gz > powerstation.tar.gz.sha256.txt
 
 # Refer to .releaserc.yaml for release configuration
 .PHONY: sem-release 
