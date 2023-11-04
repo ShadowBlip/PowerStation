@@ -713,9 +713,8 @@ dependencies = [
 
 [[package]]
 name = "libryzenadj"
-version = "0.13.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c5bccdf07c3234c06c435648a53d8cb369f76d20e03bb8d2f8c24fb2330efc32"
+version = "0.14.0"
+source = "git+https://gitlab.com/shadowapex/libryzenadj-rs.git#c730a5bd2b9b606bbfcced4700684a61c710e77d"
 dependencies = [
  "errno",
  "libryzenadj-sys",
@@ -725,9 +724,8 @@ dependencies = [
 
 [[package]]
 name = "libryzenadj-sys"
-version = "0.13.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b1de3621be974e892e12d4a07a6a2e32b6a05950759b062d94f5b54f78fabc3a"
+version = "0.14.0"
+source = "git+https://gitlab.com/shadowapex/libryzenadj-rs.git#c730a5bd2b9b606bbfcced4700684a61c710e77d"
 dependencies = [
  "bindgen",
  "cmake",
@@ -1003,7 +1001,7 @@ checksum = "439ee305def115ba05938db6eb1644ff94165c5ab5e9420d1c1bcedbba909391"
 
 [[package]]
 name = "powerstation"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "libryzenadj",
  "log",

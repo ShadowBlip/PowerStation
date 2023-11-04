@@ -34,6 +34,7 @@ plugins:
   - - "@semantic-release/git"
     - assets:
       - Cargo.toml
+      - Cargo.lock
 
   # Execute commands to build the project
   - - "@semantic-release/exec"
