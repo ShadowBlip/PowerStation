@@ -54,7 +54,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 let mut connector_paths: Vec<String> = Vec::new();
                 let connectors = gpu::get_connectors(card.name.clone());
                 for connector in connectors {
-                    let name = connector.name.clone().replace("-", "/");
+                    let name = connector.name.clone().replace('-', "/");
                     let port_path = format!("{0}/{1}", gpu_path, name);
                     connector_paths.push(port_path.clone());
                     log::debug!("Discovered connector on {}: {}", card_name, port_path);
@@ -87,7 +87,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 let mut connector_paths: Vec<String> = Vec::new();
                 let connectors = gpu::get_connectors(card.name.clone());
                 for connector in connectors {
-                    let name = connector.name.clone().replace("-", "/");
+                    let name = connector.name.clone().replace('-', "/");
                     let port_path = format!("{0}/{1}", gpu_path, name);
                     connector_paths.push(port_path.clone());
                     connection.object_server().at(port_path, connector).await?;

@@ -35,7 +35,7 @@ impl Connector {
             // convert the ParseIntError to a zbus::fdo::Error
             .map_err(|err| fdo::Error::Failed(err.to_string()))?;
 
-        return Ok(id);
+        Ok(id)
     }
 
     #[dbus_interface(property)]

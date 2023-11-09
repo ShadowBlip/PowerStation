@@ -1,8 +1,6 @@
 use std::collections::HashMap;
-use std::{
-    fs::{self, OpenOptions},
-    io::Write,
-};
+use std::{fs::OpenOptions, io::Write};
+use tokio::fs;
 use zbus::fdo;
 use zbus::zvariant::ObjectPath;
 use zbus_macros::dbus_interface;
@@ -58,23 +56,24 @@ impl CPU {
 impl CPU {
     // Returns whether or not boost is enabled
     #[dbus_interface(property)]
-    pub fn boost_enabled(&self) -> fdo::Result<bool> {
-        if !has_feature("cpb".to_string())? {
+    pub async fn boost_enabled(&self) -> fdo::Result<bool> {
+        if !has_feature("cpb".to_string()).await? {
             return Ok(false);
         }
         let result = fs::read_to_string(BOOST_PATH);
         let status = result
+            .await
             // convert the std::io::Error to a zbus::fdo::Error
             .map_err(|err| fdo::Error::IOError(err.to_string()))?
             .trim()
             .to_lowercase();
 
-        return Ok(status == "1" || status == "on");
+        Ok(status == "1" || status == "on")
     }
 
     // Set whether or not boost is enabled
     #[dbus_interface(property)]
-    pub fn set_boost_enabled(&mut self, enabled: bool) -> fdo::Result<()> {
+    pub async fn set_boost_enabled(&mut self, enabled: bool) -> fdo::Result<()> {
         log::info!("Setting boost enabled to {}", enabled);
         let status = if enabled { "1" } else { "0" };
 
@@ -94,23 +93,24 @@ impl CPU {
 
     // Returns whether or not SMT is currently enabled
     #[dbus_interface(property)]
-    pub fn smt_enabled(&self) -> fdo::Result<bool> {
-        if !has_feature("ht".to_string())? {
+    pub async fn smt_enabled(&self) -> fdo::Result<bool> {
+        if !has_feature("ht".to_string()).await? {
             return Ok(false);
         }
         let result = fs::read_to_string(SMT_PATH);
         let status = result
+            .await
             // convert the std::io::Error to a zbus::fdo::Error
             .map_err(|err| fdo::Error::IOError(err.to_string()))?
             .trim()
             .to_lowercase();
 
-        return Ok(status == "1" || status == "on");
+        Ok(status == "1" || status == "on")
     }
 
     // Set whether or not SMT is enabled
     #[dbus_interface(property)]
-    pub fn set_smt_enabled(&mut self, enabled: bool) -> fdo::Result<()> {
+    pub async fn set_smt_enabled(&mut self, enabled: bool) -> fdo::Result<()> {
         log::info!("Setting smt enabled to {}", enabled);
         let status = if enabled { "on" } else { "off" };
 
@@ -130,18 +130,18 @@ impl CPU {
 
     // Returns a list of features that the CPU supports
     #[dbus_interface(property)]
-    pub fn features(&self) -> fdo::Result<Vec<String>> {
-        return get_features();
+    pub async fn features(&self) -> fdo::Result<Vec<String>> {
+        get_features().await
     }
 
     /// Returns the total number of CPU cores detected
     #[dbus_interface(property)]
-    pub fn cores_count(&self) -> fdo::Result<u32> {
-        return Ok(self.core_count.clone());
+    pub async fn cores_count(&self) -> fdo::Result<u32> {
+        Ok(self.core_count.clone())
     }
 
     #[dbus_interface(property)]
-    pub fn cores_enabled(&self) -> fdo::Result<u32> {
+    pub async fn cores_enabled(&self) -> fdo::Result<u32> {
         let mut count = 0;
         for core_list in self.core_map.values() {
             for core in core_list {
@@ -151,7 +151,7 @@ impl CPU {
                 }
             }
         }
-        return Ok(count);
+        Ok(count)
     }
 
     #[dbus_interface(property)]
@@ -171,7 +171,7 @@ impl CPU {
                 core_count
             );
         }
-        let smt_enabled = self.smt_enabled()?;
+        let smt_enabled = self.smt_enabled().await?;
 
         // If SMT is not enabled and the given core number is greater than what
         // cores would be available, then just set it to half the core count
@@ -211,7 +211,7 @@ impl CPU {
     }
 
     /// Returns a list of DBus paths to all CPU cores
-    pub fn enumerate_cores(&mut self) -> fdo::Result<Vec<ObjectPath>> {
+    pub async fn enumerate_cores(&mut self) -> fdo::Result<Vec<ObjectPath>> {
         let mut paths: Vec<ObjectPath> = Vec::new();
 
         for i in 0..self.core_count {
@@ -220,45 +220,46 @@ impl CPU {
             paths.push(path);
         }
 
-        return Ok(paths);
+        Ok(paths)
     }
 
     /// Returns true if the CPU has the given feature flag.
-    pub fn has_feature(&mut self, flag: String) -> fdo::Result<bool> {
-        return has_feature(flag);
+    pub async fn has_feature(&mut self, flag: String) -> fdo::Result<bool> {
+        has_feature(flag).await
     }
 }
 
 // Returns true if the CPU has the given feature flag.
-fn has_feature(flag: String) -> fdo::Result<bool> {
+async fn has_feature(flag: String) -> fdo::Result<bool> {
     let features = get_features();
-    return Ok(features?.contains(&flag));
+    Ok(features.await?.contains(&flag))
 }
 
 // Returns a list of features that the CPU supports
-fn get_features() -> fdo::Result<Vec<String>> {
+async fn get_features() -> fdo::Result<Vec<String>> {
     let mut features: Vec<String> = Vec::new();
 
     // Read the data from cpuinfo
     let path = "/proc/cpuinfo";
     let result = fs::read_to_string(path);
     let content = result
+        .await
         // convert the std::io::Error to a zbus::fdo::Error
         .map_err(|err| fdo::Error::IOError(err.to_string()))?;
 
     // Parse the contents to find the flags
-    for line in content.split("\n") {
+    for line in content.split('\n') {
         if !line.starts_with("flags") {
             continue;
         }
         // Split the 'flags' line to get the actual CPU flags
-        let parts = line.split(":");
+        let parts = line.split(':');
         for part in parts {
             // Only parse the right side of the ":"
             if part.starts_with("flags") {
                 continue;
             }
-            let flags = part.trim().split(" ");
+            let flags = part.trim().split(' ');
             for flag in flags {
                 features.push(flag.to_string());
             }
@@ -266,13 +267,13 @@ fn get_features() -> fdo::Result<Vec<String>> {
         break;
     }
 
-    return Ok(features);
+    Ok(features)
 }
 
 // Returns a list of all detected cores
 pub fn get_cores() -> Vec<CPUCore> {
     let mut cores: Vec<CPUCore> = Vec::new();
-    let paths = fs::read_dir(CPUID_PATH).unwrap();
+    let paths = std::fs::read_dir(CPUID_PATH).unwrap();
     let mut i = 0;
     for path in paths {
         log::info!("Discovered core: {}", path.unwrap().path().display());
@@ -282,5 +283,5 @@ pub fn get_cores() -> Vec<CPUCore> {
         i += 1;
     }
 
-    return cores;
+    cores
 }

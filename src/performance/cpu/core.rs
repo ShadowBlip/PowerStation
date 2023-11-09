@@ -35,8 +35,7 @@ impl CPUCore {
         let file = options.write(true).open(path);
 
         // Write the value
-        file.await?
-            .write_all(status.as_bytes()).await?;
+        file.await?.write_all(status.as_bytes()).await?;
 
         Ok(())
     }
@@ -68,7 +67,7 @@ impl CPUCore {
             // convert the ParseIntError to a zbus::fdo::Error
             .map_err(|err| fdo::Error::Failed(err.to_string()))?;
 
-        return Ok(id);
+        Ok(id)
     }
 
     // Returns true if the given core is online
@@ -85,7 +84,7 @@ impl CPUCore {
             .trim()
             .to_lowercase();
 
-        return Ok(status == "1" || status == "on");
+        Ok(status == "1" || status == "on")
     }
 
     // Sets the given core to online

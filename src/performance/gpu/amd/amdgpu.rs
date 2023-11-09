@@ -46,7 +46,7 @@ impl DBusInterface for AMDGPU {
             paths.push(path);
         }
 
-        return Ok(paths);
+        Ok(paths)
     }
 
     #[dbus_interface(property)]
@@ -116,7 +116,7 @@ impl DBusInterface for AMDGPU {
             .map_err(|err| fdo::Error::IOError(err.to_string()))?;
 
         let (min, _) = limits;
-        return Ok(min);
+        Ok(min)
     }
 
     #[dbus_interface(property)]
@@ -126,7 +126,7 @@ impl DBusInterface for AMDGPU {
             .map_err(|err| fdo::Error::IOError(err.to_string()))?;
 
         let (_, max) = limits;
-        return Ok(max);
+        Ok(max)
     }
 
     #[dbus_interface(property)]
@@ -136,7 +136,7 @@ impl DBusInterface for AMDGPU {
             .map_err(|err| fdo::Error::IOError(err.to_string()))?;
 
         let (min, _) = values;
-        return Ok(min);
+        Ok(min)
     }
 
     #[dbus_interface(property)]
@@ -172,7 +172,7 @@ impl DBusInterface for AMDGPU {
             // convert the std::io::Error to a zbus::fdo::Error
             .map_err(|err| fdo::Error::IOError(err.to_string()))?;
 
-        return Ok(());
+        Ok(())
     }
 
     #[dbus_interface(property)]
@@ -182,7 +182,7 @@ impl DBusInterface for AMDGPU {
             .map_err(|err| fdo::Error::IOError(err.to_string()))?;
 
         let (_, max) = values;
-        return Ok(max);
+        Ok(max)
     }
 
     #[dbus_interface(property)]
@@ -212,7 +212,7 @@ impl DBusInterface for AMDGPU {
             // convert the std::io::Error to a zbus::fdo::Error
             .map_err(|err| fdo::Error::IOError(err.to_string()))?;
 
-        return Ok(());
+        Ok(())
     }
 
     #[dbus_interface(property)]
@@ -230,7 +230,7 @@ impl DBusInterface for AMDGPU {
             .trim()
             .to_lowercase();
 
-        return Ok(status == "manual");
+        Ok(status == "manual")
     }
 
     #[dbus_interface(property)]
@@ -263,7 +263,7 @@ fn get_clock_limits(gpu_path: String) -> Result<(f64, f64), std::io::Error> {
     let path = format!("{0}/{1}", gpu_path, "device/pp_od_clk_voltage");
     let result = fs::read_to_string(path);
     let result = result?;
-    let lines = result.split("\n");
+    let lines = result.split('\n');
 
     // Parse the output
     let mut min: Option<f64> = None;
@@ -303,7 +303,7 @@ fn get_clock_limits(gpu_path: String) -> Result<(f64, f64), std::io::Error> {
         ));
     }
 
-    return Ok((min.unwrap(), max.unwrap()));
+    Ok((min.unwrap(), max.unwrap()))
 }
 
 /// Reads the pp_od_clk_voltage from sysfs and returns the OD_SCLK values. This file will
@@ -312,7 +312,7 @@ fn get_clock_values(gpu_path: String) -> Result<(f64, f64), std::io::Error> {
     let path = format!("{0}/{1}", gpu_path, "device/pp_od_clk_voltage");
     let result = fs::read_to_string(path);
     let result = result?;
-    let lines = result.split("\n");
+    let lines = result.split('\n');
 
     // Parse the output
     let mut min: Option<f64> = None;
@@ -348,5 +348,5 @@ fn get_clock_values(gpu_path: String) -> Result<(f64, f64), std::io::Error> {
         ));
     }
 
-    return Ok((min.unwrap(), max.unwrap()));
+    Ok((min.unwrap(), max.unwrap()))
 }
