@@ -29,7 +29,10 @@ impl AMDGPU {
     /// Returns the TDP DBus interface for this GPU
     pub fn get_tdp_interface(&self) -> Option<amd::tdp::TDP> {
         match self.class.as_str() {
-            "integrated" => Some(amd::tdp::TDP::new(self.path.clone())),
+            "integrated" => Some(amd::tdp::TDP::new(
+                self.path.clone(),
+                self.device_id.clone(),
+            )),
             _ => None,
         }
     }

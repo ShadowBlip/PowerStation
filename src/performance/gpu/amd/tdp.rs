@@ -4,10 +4,17 @@ use zbus_macros::dbus_interface;
 
 use crate::performance::gpu::tdp::DBusInterface;
 
+/// Steam Deck GPU ID
+const DEV_ID_VANGOGH: &str = "163f";
+
 /// Implementation of TDP control for AMD GPUs
 pub struct TDP {
     pub path: String,
+    pub device_id: String,
     pub profile: String,
+    pub unsupported_stapm_limit: f32,
+    pub unsupported_ppt_limit_fast: f32,
+    pub unsupported_thm_limit: f32,
 }
 
 unsafe impl Sync for TDP {} // implementor (RyzenAdj) may be unsafe
@@ -15,9 +22,37 @@ unsafe impl Send for TDP {} // implementor (RyzenAdj) may be unsafe
 
 impl TDP {
     /// Create a new TDP instance
-    pub fn new(path: String) -> TDP {
+    pub fn new(path: String, device_id: String) -> TDP {
+        // Currently there is no known way to read this value
         let profile = String::from("power-saving");
-        return TDP { path, profile };
+
+        // Set fake TDP limits for GPUs that don't support ryzenadj monitoring (e.g. Steam Deck)
+        let unsupported_stapm_limit: f32 = match device_id.as_str() {
+            DEV_ID_VANGOGH => 12.0,
+            _ => 10.0,
+        };
+        let unsupported_ppt_limit_fast: f32 = match device_id.as_str() {
+            DEV_ID_VANGOGH => 15.0,
+            _ => 10.0,
+        };
+        let unsupported_thm_limit: f32 = match device_id.as_str() {
+            DEV_ID_VANGOGH => 95.0,
+            _ => 95.0,
+        };
+
+        TDP {
+            path,
+            device_id,
+            profile,
+            unsupported_stapm_limit,
+            unsupported_ppt_limit_fast,
+            unsupported_thm_limit,
+        }
+    }
+
+    /// Returns true if ryzenadj cannot read values from the given GPU
+    fn is_unsupported_gpu(&self) -> bool {
+        self.device_id == DEV_ID_VANGOGH
     }
 
     /// Set the current Slow PPT limit using ryzenadj
@@ -25,11 +60,11 @@ impl TDP {
         log::debug!("Setting slow ppt limit to {}", value);
         let ryzenadj = RyzenAdj::new().map_err(|err| err.to_string())?;
         match ryzenadj.set_slow_limit(value) {
-            Ok(x) => return Ok(x),
+            Ok(x) => Ok(x),
             Err(e) => {
                 let err = format!("Failed to set slow ppt limit: {}", e);
                 log::error!("{}", err);
-                return Err(String::from(err));
+                Err(err)
             }
         }
     }
@@ -51,13 +86,16 @@ impl TDP {
     /// Set the current Fast PPT limit using ryzenadj
     fn set_ppt_limit_fast(&mut self, value: u32) -> Result<(), String> {
         log::debug!("Setting fast ppt limit to {}", value);
+        if self.is_unsupported_gpu() {
+            self.unsupported_ppt_limit_fast = value as f32;
+        }
         let ryzenadj = RyzenAdj::new().map_err(|err| err.to_string())?;
         match ryzenadj.set_fast_limit(value) {
-            Ok(x) => return Ok(x),
+            Ok(x) => Ok(x),
             Err(e) => {
                 let err = format!("Failed to set fast ppt limit: {}", e);
                 log::error!("{}", err);
-                return Err(String::from(err));
+                Err(err)
             }
         }
     }
@@ -65,6 +103,13 @@ impl TDP {
     /// Get the PPT fast limit
     fn get_ppt_limit_fast(&self) -> Result<f32, String> {
         log::debug!("Getting ppt fast limit");
+
+        // Return what we _think_ the value is for unsupported GPUs
+        if self.is_unsupported_gpu() {
+            return Ok(self.unsupported_ppt_limit_fast);
+        }
+
+        // Get the fast limit from ryzenadj
         let ryzenadj = RyzenAdj::new().map_err(|err| err.to_string())?;
         match ryzenadj.get_fast_limit() {
             Ok(x) => {
@@ -74,7 +119,7 @@ impl TDP {
             Err(e) => {
                 let err = format!("Failed to get ppt fast limit: {}", e);
                 log::error!("{}", err);
-                Err(String::from(err))
+                Err(err)
             }
         }
     }
@@ -82,6 +127,9 @@ impl TDP {
     /// Set the current TDP value using ryzenadj
     fn set_stapm_limit(&mut self, value: u32) -> Result<(), String> {
         log::debug!("Setting stapm limit to {}", value);
+        if self.is_unsupported_gpu() {
+            self.unsupported_stapm_limit = value as f32;
+        }
         let ryzenadj = RyzenAdj::new().map_err(|err| err.to_string())?;
         match ryzenadj.set_stapm_limit(value) {
             Ok(x) => {
@@ -91,7 +139,7 @@ impl TDP {
             Err(e) => {
                 let err = format!("Failed to set stapm limit: {}", e);
                 log::error!("{}", err);
-                Err(String::from(err))
+                Err(err)
             }
         }
     }
@@ -99,6 +147,13 @@ impl TDP {
     /// Returns the current TDP value using ryzenadj
     fn get_stapm_limit(&self) -> Result<f32, String> {
         log::debug!("Getting stapm limit");
+
+        // Return what we _think_ the value is for unsupported GPUs
+        if self.is_unsupported_gpu() {
+            return Ok(self.unsupported_stapm_limit);
+        }
+
+        // Get the value from ryzenadj
         let ryzenadj = RyzenAdj::new().map_err(|err| err.to_string())?;
         match ryzenadj.get_stapm_limit() {
             Ok(x) => {
@@ -108,7 +163,7 @@ impl TDP {
             Err(e) => {
                 let err = format!("Failed to get stapm limit: {}", e);
                 log::error!("{}", err);
-                Err(String::from(err))
+                Err(err)
             }
         }
     }
@@ -116,13 +171,16 @@ impl TDP {
     // Sets the thermal limit value using ryzenadj
     fn set_thm_limit(&mut self, value: u32) -> Result<(), String> {
         log::debug!("Setting thm limit to: {}", value);
+        if self.is_unsupported_gpu() {
+            self.unsupported_thm_limit = value as f32;
+        }
         let ryzenadj = RyzenAdj::new().map_err(|err| err.to_string())?;
         match ryzenadj.set_tctl_temp(value) {
             Ok(x) => Ok(x),
             Err(e) => {
                 let err = format!("Failed to set tctl limit: {}", e);
                 log::error!("{}", err);
-                Err(String::from(err))
+                Err(err)
             }
         }
     }
@@ -130,13 +188,20 @@ impl TDP {
     /// Returns the current thermal limit value using ryzenadj
     fn get_thm_limit(&self) -> Result<f32, String> {
         log::debug!("Getting thm limit");
+
+        // Return what we _think_ the value is for unsupported GPUs
+        if self.is_unsupported_gpu() {
+            return Ok(self.unsupported_thm_limit);
+        }
+
+        // Get the value from ryzenadj
         let ryzenadj = RyzenAdj::new().map_err(|err| err.to_string())?;
         match ryzenadj.get_tctl_temp() {
             Ok(x) => Ok(x),
             Err(e) => {
                 let err = format!("Failed to get tctl temp: {}", e);
                 log::error!("{}", err);
-                Err(String::from(err))
+                Err(err)
             }
         }
     }
@@ -165,7 +230,7 @@ impl DBusInterface for TDP {
         // Get the current stapm limit from ryzenadj
         let stapm_limit =
             TDP::get_stapm_limit(&self).map_err(|err| fdo::Error::Failed(err.to_string()))?;
-        return Ok(stapm_limit.into());
+        Ok(stapm_limit.into())
     }
 
     /// Sets the given TDP value
@@ -181,10 +246,9 @@ impl DBusInterface for TDP {
         // Get the current boost value before updating the STAPM limit. We will
         // use this value to also adjust the Fast PPT Limit.
         let fast_ppt_limit =
-            TDP::get_ppt_limit_fast(&self).map_err(|err| fdo::Error::Failed(String::from(err)))?;
+            TDP::get_ppt_limit_fast(&self).map_err(|err| fdo::Error::Failed(err))?;
         let mut fast_ppt_limit = fast_ppt_limit as f64;
-        let stapm_limit =
-            TDP::get_stapm_limit(&self).map_err(|err| fdo::Error::Failed(String::from(err)))?;
+        let stapm_limit = TDP::get_stapm_limit(&self).map_err(|err| fdo::Error::Failed(err))?;
         let stapm_limit = stapm_limit as f64;
 
         // TODO: Is this a bug in ryzenadj? Sometimes fast_ppt_limit is ~0
@@ -198,19 +262,17 @@ impl DBusInterface for TDP {
 
         // Update the STAPM limit with the TDP value
         let limit: u32 = (value * 1000.0) as u32;
-        TDP::set_stapm_limit(self, limit).map_err(|err| fdo::Error::Failed(String::from(err)))?;
+        TDP::set_stapm_limit(self, limit).map_err(|err| fdo::Error::Failed(err))?;
 
         // Also update the slow PPT limit
-        TDP::set_ppt_limit_slow(self, limit)
-            .map_err(|err| fdo::Error::Failed(String::from(err)))?;
+        TDP::set_ppt_limit_slow(self, limit).map_err(|err| fdo::Error::Failed(err))?;
 
         // After successfully setting the STAPM limit, we also need to adjust the
         // Fast PPT Limit accordingly so it is *boost* distance away.
         let fast_ppt_limit = ((value + boost) * 1000.0) as u32;
-        TDP::set_ppt_limit_fast(self, fast_ppt_limit)
-            .map_err(|err| fdo::Error::Failed(String::from(err)))?;
+        TDP::set_ppt_limit_fast(self, fast_ppt_limit).map_err(|err| fdo::Error::Failed(err))?;
 
-        return Ok(());
+        Ok(())
     }
 
     /// The TDP boost for AMD is the total difference between the Fast PPT Limit
@@ -226,7 +288,7 @@ impl DBusInterface for TDP {
 
         let boost = fast_ppt_limit - stapm_limit;
 
-        return Ok(boost);
+        Ok(boost)
     }
 
     #[dbus_interface(property)]
@@ -239,22 +301,20 @@ impl DBusInterface for TDP {
         }
 
         // Get the STAPM Limit so we can calculate what Fast PPT Limit to set.
-        let stapm_limit =
-            TDP::get_stapm_limit(&self).map_err(|err| fdo::Error::Failed(String::from(err)))?;
+        let stapm_limit = TDP::get_stapm_limit(&self).map_err(|err| fdo::Error::Failed(err))?;
         let stapm_limit = stapm_limit as f64;
 
         // Set the new fast ppt limit
         let fast_ppt_limit = ((stapm_limit + value) * 1000.0) as u32;
-        TDP::set_ppt_limit_fast(self, fast_ppt_limit)
-            .map_err(|err| fdo::Error::Failed(String::from(err)))?;
+        TDP::set_ppt_limit_fast(self, fast_ppt_limit).map_err(|err| fdo::Error::Failed(err))?;
 
-        return Ok(());
+        Ok(())
     }
 
     #[dbus_interface(property)]
     fn thermal_throttle_limit_c(&self) -> fdo::Result<f64> {
         let limit = TDP::get_thm_limit(&self).map_err(|err| fdo::Error::Failed(err.to_string()))?;
-        return Ok(limit.into());
+        Ok(limit.into())
     }
 
     #[dbus_interface(property)]
