@@ -1,0 +1,63 @@
+<?xml version="1.0"?>
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN" "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<node>
+  <interface name="org.freedesktop.DBus.Peer">
+    <method name="Ping">
+    </method>
+    <method name="GetMachineId">
+      <arg type="s" direction="out"/>
+    </method>
+  </interface>
+  <interface name="org.shadowblip.CPU">
+    <!--
+     Returns a list of DBus paths to all CPU cores
+     -->
+    <method name="EnumerateCores">
+      <arg type="ao" direction="out"/>
+    </method>
+    <!--
+     Returns true if the CPU has the given feature flag.
+     -->
+    <method name="HasFeature">
+      <arg name="flag" type="s" direction="in"/>
+      <arg type="b" direction="out"/>
+    </method>
+    <property name="BoostEnabled" type="b" access="readwrite"/>
+    <!--
+     Returns the total number of CPU cores detected
+     -->
+    <property name="CoresCount" type="u" access="read"/>
+    <property name="CoresEnabled" type="u" access="readwrite"/>
+    <property name="Features" type="as" access="read"/>
+    <property name="SmtEnabled" type="b" access="readwrite"/>
+  </interface>
+  <interface name="org.freedesktop.DBus.Introspectable">
+    <method name="Introspect">
+      <arg type="s" direction="out"/>
+    </method>
+  </interface>
+  <interface name="org.freedesktop.DBus.Properties">
+    <method name="Get">
+      <arg name="interface_name" type="s" direction="in"/>
+      <arg name="property_name" type="s" direction="in"/>
+      <arg type="v" direction="out"/>
+    </method>
+    <method name="Set">
+      <arg name="interface_name" type="s" direction="in"/>
+      <arg name="property_name" type="s" direction="in"/>
+      <arg name="value" type="v" direction="in"/>
+    </method>
+    <method name="GetAll">
+      <arg name="interface_name" type="s" direction="in"/>
+      <arg type="a{sv}" direction="out"/>
+    </method>
+    <!--
+     Emits the `org.freedesktop.DBus.Properties.PropertiesChanged` signal.
+     -->
+    <signal name="PropertiesChanged">
+      <arg name="interface_name" type="s"/>
+      <arg name="changed_properties" type="a{sv}"/>
+      <arg name="invalidated_properties" type="as"/>
+    </signal>
+  </interface>
+</node>

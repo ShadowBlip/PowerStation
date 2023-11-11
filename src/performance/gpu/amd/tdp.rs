@@ -171,6 +171,7 @@ impl DBusInterface for TDP {
     /// Sets the given TDP value
     #[dbus_interface(property, name = "TDP")]
     fn set_tdp(&mut self, value: f64) -> fdo::Result<()> {
+        log::debug!("Setting TDP to: {}", value);
         if value < 1.0 {
             let err = "Cowardly refusing to set TDP less than 1";
             log::warn!("{}", err);
@@ -181,10 +182,16 @@ impl DBusInterface for TDP {
         // use this value to also adjust the Fast PPT Limit.
         let fast_ppt_limit =
             TDP::get_ppt_limit_fast(&self).map_err(|err| fdo::Error::Failed(String::from(err)))?;
-        let fast_ppt_limit = fast_ppt_limit as f64;
+        let mut fast_ppt_limit = fast_ppt_limit as f64;
         let stapm_limit =
             TDP::get_stapm_limit(&self).map_err(|err| fdo::Error::Failed(String::from(err)))?;
         let stapm_limit = stapm_limit as f64;
+
+        // TODO: Is this a bug in ryzenadj? Sometimes fast_ppt_limit is ~0
+        if fast_ppt_limit < 1.0 {
+            log::warn!("Got a fast limit less than 1. Possible ryzenadj bug?");
+            fast_ppt_limit = stapm_limit;
+        }
 
         let boost = fast_ppt_limit - stapm_limit;
         log::debug!("Current boost value is: {}", boost);
@@ -224,6 +231,7 @@ impl DBusInterface for TDP {
 
     #[dbus_interface(property)]
     fn set_boost(&mut self, value: f64) -> fdo::Result<()> {
+        log::debug!("Setting boost to: {}", value);
         if value < 0.0 {
             let err = "Cowardly refusing to set TDP Boost less than 0";
             log::warn!("{}", err);
@@ -251,6 +259,7 @@ impl DBusInterface for TDP {
 
     #[dbus_interface(property)]
     fn set_thermal_throttle_limit_c(&mut self, limit: f64) -> fdo::Result<()> {
+        log::debug!("Setting thermal throttle limit to: {}", limit);
         let limit = limit as u32;
         TDP::set_thm_limit(self, limit).map_err(|err| fdo::Error::Failed(err.to_string()))
     }
@@ -262,6 +271,7 @@ impl DBusInterface for TDP {
 
     #[dbus_interface(property)]
     fn set_power_profile(&mut self, profile: String) -> fdo::Result<()> {
+        log::debug!("Setting power profile to: {}", profile);
         TDP::set_power_profile(&self, profile.clone())
             .map_err(|err| fdo::Error::Failed(err.to_string()))?;
         self.profile = profile;

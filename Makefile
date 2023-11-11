@@ -93,6 +93,46 @@ dist/powerstation.tar.gz: build
 	tar cvfz $@ -C $(CACHE_DIR) powerstation
 	cd dist && sha256sum powerstation.tar.gz > powerstation.tar.gz.sha256.txt
 
+INTROSPECT_CARD ?= Card2
+INTROSPECT_CONNECTOR ?= eDP/1
+.PHONY: introspect
+introspect: ## Generate DBus XML
+	echo "Generating DBus XML spec..."
+	mkdir -p bindings/dbus-xml
+	busctl introspect org.shadowblip.PowerStation \
+		/org/shadowblip/Performance/CPU --xml-interface > bindings/dbus-xml/org-shadowblip-cpu.xml
+	xmlstarlet ed -L -d '//node[@name]' bindings/dbus-xml/org-shadowblip-cpu.xml
+	busctl introspect org.shadowblip.PowerStation \
+		/org/shadowblip/Performance/CPU/Core0 --xml-interface > bindings/dbus-xml/org-shadowblip-cpu-core.xml
+	busctl introspect org.shadowblip.PowerStation \
+		/org/shadowblip/Performance/GPU --xml-interface > bindings/dbus-xml/org-shadowblip-gpu.xml
+	xmlstarlet ed -L -d '//node[@name]' bindings/dbus-xml/org-shadowblip-gpu.xml
+	busctl introspect org.shadowblip.PowerStation \
+		/org/shadowblip/Performance/GPU/$(INTROSPECT_CARD) --xml-interface > bindings/dbus-xml/org-shadowblip-gpu-card.xml
+	xmlstarlet ed -L -d '//node[@name]' bindings/dbus-xml/org-shadowblip-gpu-card.xml
+	busctl introspect org.shadowblip.PowerStation \
+		/org/shadowblip/Performance/GPU/Card2/$(INTROSPECT_CONNECTOR) --xml-interface > bindings/dbus-xml/org-shadowblip-gpu-card-connector.xml
+
+XSL_TEMPLATE := ./docs/dbus2markdown.xsl
+.PHONY: docs
+docs: ## Generate markdown docs for DBus interfaces
+	mkdir -p docs
+	xsltproc --novalid -o docs/cpu.md $(XSL_TEMPLATE) bindings/dbus-xml/org-shadowblip-cpu.xml
+	mdformat ./docs/cpu.md
+	sed -i 's/DBus Interface API/CPU DBus Interface API/g' ./docs/cpu.md
+	xsltproc --novalid -o docs/cpu-core.md $(XSL_TEMPLATE) bindings/dbus-xml/org-shadowblip-cpu-core.xml
+	mdformat ./docs/cpu-core.md
+	sed -i 's/DBus Interface API/CPU.Core DBus Interface API/g' ./docs/cpu-core.md
+	xsltproc --novalid -o docs/gpu.md $(XSL_TEMPLATE) bindings/dbus-xml/org-shadowblip-gpu.xml
+	mdformat ./docs/gpu.md
+	sed -i 's/DBus Interface API/GPU DBus Interface API/g' ./docs/gpu.md
+	xsltproc --novalid -o docs/gpu-card.md $(XSL_TEMPLATE) bindings/dbus-xml/org-shadowblip-gpu-card.xml
+	mdformat ./docs/gpu-card.md
+	sed -i 's/DBus Interface API/GPU.Card DBus Interface API/g' ./docs/gpu-card.md
+	xsltproc --novalid -o docs/gpu-card-connector.md $(XSL_TEMPLATE) bindings/dbus-xml/org-shadowblip-gpu-card-connector.xml
+	mdformat ./docs/gpu-card-connector.md
+	sed -i 's/DBus Interface API/GPU.Card.Connector DBus Interface API/g' ./docs/gpu-card-connector.md
+
 # Refer to .releaserc.yaml for release configuration
 .PHONY: sem-release 
 sem-release: ## Publish a release with semantic release 

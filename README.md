@@ -13,7 +13,10 @@
 
 ## About
 
-Open source performance daemon with DBus interface
+PowerStation is an open source TDP control and performance daemon for Linux that 
+can be used to control CPU and GPU settings for better performance and battery
+life. Performance control is done through [DBus](https://www.freedesktop.org/wiki/Software/dbus/)
+to provide a UI-agnostic interface to CPU and GPU settings.
 
 ## Install
 
@@ -24,12 +27,30 @@ make build
 sudo make install
 ```
 
+If you are using ArchLinux, you can install PowerStation from the AUR:
+
+```bash
+yay -S powerstation-bin
+```
+
 Then start the service with:
 
 ```bash
 sudo systemctl enable powerstation
 sudo systemctl start powerstation
 ```
+
+## Documentation
+
+XML specifications for all interfaces can be found in [bindings/dbus-xml](./bindings/dbus-xml).
+
+Individual interface documentation can be found here:
+
+* [org.shadowblip.CPU](./docs/cpu.md)
+* [org.shadowblip.CPU.Core](./docs/cpu-core.md)
+* [org.shadowblip.GPU](./docs/gpu.md)
+* [org.shadowblip.GPU.Card](./docs/gpu-card.md)
+* [org.shadowblip.GPU.Card.Connector](./docs/gpu-card-connector.md)
 
 ## Usage
 
@@ -86,7 +107,8 @@ org.freedesktop.DBus.Properties     interface -         -                      -
 .GetAll                             method    s         a{sv}                  -
 .Set                                method    ssv       -                      -
 .PropertiesChanged                  signal    sa{sv}as  -                      -
-org.shadowblip.GPU                  interface -         -                      -
+org.shadowblip.GPU.Card             interface -         -                      -
+.EnumerateConnectors                method    -         ao                     -
 .Class                              property  s         "integrated"           emits-change
 .ClassId                            property  s         "030000"               emits-change
 .ClockLimitMhzMax                   property  d         -                      emits-change
@@ -104,16 +126,22 @@ org.shadowblip.GPU                  interface -         -                      -
 .SubvendorId                        property  s         "1462"                 emits-change
 .Vendor                             property  s         "AMD"                  emits-change
 .VendorId                           property  s         "1002"                 emits-change
+org.shadowblip.GPU.Card.TDP         interface -         -                      -
+.Boost                              property  d         11                     emits-change writable
+.PowerProfile                       property  s         "max-performance"      emits-change writable
+.TDP                                property  d         55                     emits-change writable
+.ThermalThrottleLimitC              property  d         95                     emits-change writable
 ```
 
 ## Testing
 
-When running, you can test setting properties with:
+When PowerStation is running, you can test setting properties with:
 
 ```bash
 busctl set-property org.shadowblip.PowerStation /org/shadowblip/Performance/CPU/Core11 org.shadowblip.CPU.Core Online "b" False
 ```
 
-## References
 
-https://nyirog.medium.com/register-dbus-service-f923dfca9f1
+## License
+
+PowerStation is licensed under THE GNU GPLv3+. See LICENSE for details.

@@ -1,0 +1,81 @@
+<?xml version="1.0"?>
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN" "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<node>
+  <interface name="org.shadowblip.GPU.Card.TDP">
+    <!--
+     The TDP boost for AMD is the total difference between the Fast PPT Limit
+     and the STAPM limit.
+     -->
+    <property name="Boost" type="d" access="readwrite"/>
+    <property name="PowerProfile" type="s" access="readwrite"/>
+    <!--
+     Get the currently set TDP value
+     -->
+    <!--
+     Sets the given TDP value
+     -->
+    <property name="TDP" type="d" access="readwrite"/>
+    <property name="ThermalThrottleLimitC" type="d" access="readwrite"/>
+  </interface>
+  <interface name="org.shadowblip.GPU.Card">
+    <!--
+     Returns a list of DBus paths to all connectors
+     -->
+    <method name="EnumerateConnectors">
+      <arg type="ao" direction="out"/>
+    </method>
+    <property name="Class" type="s" access="read"/>
+    <property name="ClassId" type="s" access="read"/>
+    <property name="ClockLimitMhzMax" type="d" access="read"/>
+    <property name="ClockLimitMhzMin" type="d" access="read"/>
+    <property name="ClockValueMhzMax" type="d" access="readwrite"/>
+    <property name="ClockValueMhzMin" type="d" access="readwrite"/>
+    <property name="Device" type="s" access="read"/>
+    <property name="DeviceId" type="s" access="read"/>
+    <property name="ManualClock" type="b" access="readwrite"/>
+    <property name="Name" type="s" access="read"/>
+    <property name="Path" type="s" access="read"/>
+    <property name="RevisionId" type="s" access="read"/>
+    <property name="Subdevice" type="s" access="read"/>
+    <property name="SubdeviceId" type="s" access="read"/>
+    <property name="SubvendorId" type="s" access="read"/>
+    <property name="Vendor" type="s" access="read"/>
+    <property name="VendorId" type="s" access="read"/>
+  </interface>
+  <interface name="org.freedesktop.DBus.Properties">
+    <method name="Get">
+      <arg name="interface_name" type="s" direction="in"/>
+      <arg name="property_name" type="s" direction="in"/>
+      <arg type="v" direction="out"/>
+    </method>
+    <method name="Set">
+      <arg name="interface_name" type="s" direction="in"/>
+      <arg name="property_name" type="s" direction="in"/>
+      <arg name="value" type="v" direction="in"/>
+    </method>
+    <method name="GetAll">
+      <arg name="interface_name" type="s" direction="in"/>
+      <arg type="a{sv}" direction="out"/>
+    </method>
+    <!--
+     Emits the `org.freedesktop.DBus.Properties.PropertiesChanged` signal.
+     -->
+    <signal name="PropertiesChanged">
+      <arg name="interface_name" type="s"/>
+      <arg name="changed_properties" type="a{sv}"/>
+      <arg name="invalidated_properties" type="as"/>
+    </signal>
+  </interface>
+  <interface name="org.freedesktop.DBus.Peer">
+    <method name="Ping">
+    </method>
+    <method name="GetMachineId">
+      <arg type="s" direction="out"/>
+    </method>
+  </interface>
+  <interface name="org.freedesktop.DBus.Introspectable">
+    <method name="Introspect">
+      <arg type="s" direction="out"/>
+    </method>
+  </interface>
+</node>
