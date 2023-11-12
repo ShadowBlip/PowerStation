@@ -26,6 +26,10 @@ impl CPU {
         let mut core_map: HashMap<u32, Vec<CPUCore>> = HashMap::new();
         let mut cores = get_cores();
 
+        // Ensure SMT is enabled
+        let file = OpenOptions::new().write(true).open(SMT_PATH);
+        let _ = file.unwrap().write_all("on".as_bytes());
+
         // Ensure all cores are online
         for core in cores.iter_mut() {
             let _ = core.set_online(true);
@@ -44,6 +48,7 @@ impl CPU {
             let list = core_map.get_mut(&core_id).unwrap();
             list.push(core);
         }
+        log::info!("Core Map: {:?}", core_map);
 
         CPU {
             core_map,
@@ -193,8 +198,14 @@ impl CPU {
         let mut enabled_count = 1;
         for core_id in core_ids {
             let core_list = self.core_map.get_mut(&core_id).unwrap();
+            let mut is_physical = true;
             for core in core_list.iter_mut() {
                 if core.number == 0 {
+                    is_physical = false;
+                    continue;
+                }
+                if !smt_enabled && !is_physical {
+                    log::info!("Ignoring core {} while SMT is disabled.", core.number);
                     continue;
                 }
                 let should_enable = enabled_count < num;
@@ -204,6 +215,7 @@ impl CPU {
                 core.set_online_async(should_enable)
                     .await
                     .map_err(|err| fdo::Error::IOError(err.to_string()))?;
+                is_physical = false;
             }
         }
 
