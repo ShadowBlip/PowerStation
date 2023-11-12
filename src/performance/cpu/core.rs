@@ -7,6 +7,7 @@ use zbus::fdo;
 use zbus_macros::dbus_interface;
 
 // Instance of a single CPU core
+#[derive(Debug)]
 pub struct CPUCore {
     // CPU core number
     pub number: u32,
