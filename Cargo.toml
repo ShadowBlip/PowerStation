@@ -2,8 +2,19 @@
 name = "powerstation"
 version = "0.1.5"
 edition = "2021"
+license = "GPL-3.0-or-later"
+description = "Daemon for controlling TDP and performance over DBus"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[package.metadata.generate-rpm]
+assets = [
+  { source = "./target/release/powerstation", dest = "/usr/bin/powerstation", mode = "755" },
+  { source = "./rootfs/usr/share/dbus-1/system.d/org.shadowblip.PowerStation.conf", dest = "/usr/share/dbus-1/system.d/org.shadowblip.PowerStation.conf", mode = "644" },
+  { source = "./rootfs/usr/lib/systemd/system/powerstation.service", dest = "/usr/lib/systemd/system/powerstation.service", mode = "644" },
+]
+
+[package.metadata.generate-rpm.requires]
+dbus = "*"
+pciutils = "*"
 
 [dependencies]
 libryzenadj = { git = "https://gitlab.com/shadowapex/libryzenadj-rs.git" }

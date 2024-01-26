@@ -6,7 +6,7 @@ branches:
   - name: main
   #- name: 'v+([0-9])?(.{+([0-9]),x}).x'
 
-# These plugins will run when a release is triggered. They will analyze commit 
+# These plugins will run when a release is triggered. They will analyze commit
 # messages to determine what kind of release this is and publish a new release.
 plugins:
   # Analyze commit messages to determine next version
@@ -15,26 +15,26 @@ plugins:
   # Generate release notes
   - "@semantic-release/release-notes-generator"
 
-  # Replace version strings in the project. The 'git' plugin is needed to 
+  # Replace version strings in the project. The 'git' plugin is needed to
   # commit the version strings to the repository.
   - - "@google/semantic-release-replace-plugin"
     - replacements:
-      - files:
-          - Cargo.toml
-        from: "^version = .*\"$"
-        to: "version = \"${nextRelease.version}\""
-        #results:
-        #  - file: Cargo.toml
-        #    hasChanged: true
-        #    numMatches: 1
-        #    numReplacements: 1
-        #countMatches: true
+        - files:
+            - Cargo.toml
+          from: '^version = .*"$'
+          to: 'version = "${nextRelease.version}"'
+          #results:
+          #  - file: Cargo.toml
+          #    hasChanged: true
+          #    numMatches: 1
+          #    numReplacements: 1
+          #countMatches: true
 
   # Commit the following changes to git after other plugins have run
   - - "@semantic-release/git"
     - assets:
-      - Cargo.toml
-      - Cargo.lock
+        - Cargo.toml
+        - Cargo.lock
 
   # Execute commands to build the project
   - - "@semantic-release/exec"
@@ -44,5 +44,7 @@ plugins:
   # Publish artifacts as a GitHub release
   - - "@semantic-release/github"
     - assets:
-      - path: dist/powerstation.tar.gz
-      - path: dist/powerstation.tar.gz.sha256.txt
+        - path: dist/powerstation-*.rpm
+        - path: dist/powerstation-*.rpm.sha256.txt
+        - path: dist/powerstation.tar.gz
+        - path: dist/powerstation.tar.gz.sha256.txt

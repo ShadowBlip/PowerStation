@@ -1,3 +1,6 @@
+NAME := $(shell grep 'name =' Cargo.toml | head -n 1 | cut -d'"' -f2)
+VERSION := $(shell grep '^version =' Cargo.toml | cut -d'"' -f2)
+ARCH := $(shell uname -m)
 ALL_RS := $(shell find src -name '*.rs')
 PREFIX ?= /usr
 CACHE_DIR := .cache
@@ -84,7 +87,10 @@ setup: /usr/share/dbus-1/system.d/org.shadowblip.PowerStation.conf ## Install db
 ##@ Distribution
 
 .PHONY: dist
-dist: dist/powerstation.tar.gz ## Build a redistributable archive of the project
+dist: dist/$(NAME).tar.gz dist/$(NAME)-$(VERSION)-1.$(ARCH).rpm ## Create all redistributable versions of the project
+
+.PHONY: dist-archive
+dist-archive: dist/powerstation.tar.gz ## Build a redistributable archive of the project
 dist/powerstation.tar.gz: build
 	rm -rf $(CACHE_DIR)/powerstation
 	mkdir -p $(CACHE_DIR)/powerstation
@@ -92,6 +98,15 @@ dist/powerstation.tar.gz: build
 	mkdir -p dist
 	tar cvfz $@ -C $(CACHE_DIR) powerstation
 	cd dist && sha256sum powerstation.tar.gz > powerstation.tar.gz.sha256.txt
+
+.PHONY: dist-rpm
+dist-rpm: dist/$(NAME)-$(VERSION)-1.$(ARCH).rpm ## Build a redistributable RPM package
+dist/$(NAME)-$(VERSION)-1.$(ARCH).rpm: target/release/$(NAME)
+	mkdir -p dist
+	cargo install cargo-generate-rpm
+	cargo generate-rpm
+	cp ./target/generate-rpm/$(NAME)-$(VERSION)-1.$(ARCH).rpm dist
+	cd dist && sha256sum $(NAME)-$(VERSION)-1.$(ARCH).rpm > $(NAME)-$(VERSION)-1.$(ARCH).rpm.sha256.txt
 
 INTROSPECT_CARD ?= Card2
 INTROSPECT_CONNECTOR ?= eDP/1
