@@ -25,7 +25,7 @@ pub enum GPU {
 }
 
 /// Represents the data contained in /sys/class/drm/cardX
-pub trait DBusInterface {
+pub trait DBusInterfaceForGPU {
     fn name(&self) -> String;
     fn path(&self) -> String;
     fn class(&self) -> String;

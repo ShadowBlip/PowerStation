@@ -6,7 +6,7 @@ use zbus::{fdo, zvariant::ObjectPath};
 use zbus_macros::dbus_interface;
 
 use crate::performance::gpu::amd;
-use crate::performance::gpu::DBusInterface;
+use crate::performance::gpu::DBusInterfaceForGPU;
 
 pub struct AMDGPU {
     pub connector_paths: Vec<String>,
@@ -39,7 +39,7 @@ impl AMDGPU {
 }
 
 #[dbus_interface(name = "org.shadowblip.GPU.Card")]
-impl DBusInterface for AMDGPU {
+impl DBusInterfaceForGPU for AMDGPU {
     /// Returns a list of DBus paths to all connectors
     fn enumerate_connectors(&self) -> fdo::Result<Vec<ObjectPath>> {
         let mut paths: Vec<ObjectPath> = Vec::new();
