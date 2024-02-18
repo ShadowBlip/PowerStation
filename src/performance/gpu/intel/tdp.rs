@@ -30,7 +30,7 @@ impl TDPDevice for TDP {
             }
         };
 
-        return Ok(long_tdp / 1000000.0);
+        Ok(long_tdp / 1000000.0)
     }
 
     fn set_tdp(&mut self, value: f64) -> TDPResult<()> {
@@ -58,9 +58,7 @@ impl TDPDevice for TDP {
             .map_err(|err| TDPError::IOError(err.to_string()))?;
 
         // Update the boost value
-        self.set_boost(boost)?;
-
-        return Ok(());
+        Ok(self.set_boost(boost)?)
     }
 
     fn boost(&self) -> TDPResult<f64> {
@@ -79,9 +77,7 @@ impl TDPDevice for TDP {
         };
 
         let tdp = self.tdp()?;
-        let boost = (peak_tdp / 1000000.0) - tdp;
-
-        return Ok(boost);
+        Ok((peak_tdp / 1000000.0) - tdp)
     }
 
     fn set_boost(&mut self, value: f64) -> TDPResult<()> {
@@ -98,7 +94,6 @@ impl TDPDevice for TDP {
         } else {
             tdp * 1000000.0
         };
-        let peak_tdp = (boost + tdp) * 1000000.0;
 
         // Write the short tdp
         let path = "/sys/class/powercap/intel-rapl/intel-rapl:0/constraint_1_power_limit_uw";
@@ -112,7 +107,7 @@ impl TDPDevice for TDP {
         // Write the peak tdp
         let path = "/sys/class/powercap/intel-rapl/intel-rapl:0/constraint_2_power_limit_uw";
         let file = OpenOptions::new().write(true).open(path);
-        let value = format!("{}", peak_tdp);
+        let value = format!("{}", (boost + tdp) * 1000000.0);
         file
             .map_err(|err| TDPError::FailedOperation(err.to_string()))?
             .write_all(value.as_bytes())
