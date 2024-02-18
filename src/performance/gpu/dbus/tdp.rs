@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use std::sync::Mutex;
 use zbus::fdo::Error;
-use zbus::{fdo, zvariant::ObjectPath};
+use zbus::fdo;
 use zbus_macros::dbus_interface;
 
 use crate::performance::gpu::tdp::TDPError;

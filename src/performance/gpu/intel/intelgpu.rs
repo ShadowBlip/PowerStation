@@ -1,5 +1,3 @@
-// TODO: totally remove dbus from here
-
 use std::{
     fs::{self, OpenOptions},
     io::Write,
@@ -8,10 +6,9 @@ use std::{
     }
 };
 
-use zbus::{fdo, zvariant::ObjectPath};
-
 use crate::performance::gpu::interface::GPUIface;
 use crate::performance::gpu::{intel, tdp::TDPDevice};
+use crate::performance::gpu::interface::{GPUError, GPUResult};
 
 pub struct IntelGPU {
     pub name: String,
@@ -97,51 +94,44 @@ impl GPUIface for IntelGPU {
         self.revision_id.clone()
     }
 
-    fn clock_limit_mhz_min(&self) -> fdo::Result<f64> {
+    fn clock_limit_mhz_min(&self) -> GPUResult<f64> {
         let path = format!("{0}/{1}", self.path(), "gt_RPn_freq_mhz");
         let result = fs::read_to_string(path);
         let limit = result
-            // convert the std::io::Error to a zbus::fdo::Error
-            .map_err(|err| fdo::Error::IOError(err.to_string()))?
+            .map_err(|err| GPUError::IOError(err.to_string()))?
             .trim()
             .parse::<f64>()
-            // convert the ParseIntError to a zbus::fdo::Error
-            .map_err(|err| fdo::Error::Failed(err.to_string()))?;
+            .map_err(|err| GPUError::FailedOperation(err.to_string()))?;
 
         return Ok(limit);
     }
 
-    fn clock_limit_mhz_max(&self) -> fdo::Result<f64> {
+    fn clock_limit_mhz_max(&self) -> GPUResult<f64> {
         let path = format!("{0}/{1}", self.path(), "gt_RP0_freq_mhz");
-        let result = fs::read_to_string(path);
-        let limit = result
-            // convert the std::io::Error to a zbus::fdo::Error
-            .map_err(|err| fdo::Error::IOError(err.to_string()))?
+        let limit = fs::read_to_string(path)
+            .map_err(|err| GPUError::IOError(err.to_string()))?
             .trim()
             .parse::<f64>()
-            // convert the ParseIntError to a zbus::fdo::Error
-            .map_err(|err| fdo::Error::Failed(err.to_string()))?;
+            .map_err(|err| GPUError::FailedOperation(err.to_string()))?;
 
         return Ok(limit);
     }
 
-    fn clock_value_mhz_min(&self) -> fdo::Result<f64> {
+    fn clock_value_mhz_min(&self) -> GPUResult<f64> {
         let path = format!("{0}/{1}", self.path(), "gt_min_freq_mhz");
         let result = fs::read_to_string(path);
         let value = result
-            // convert the std::io::Error to a zbus::fdo::Error
-            .map_err(|err| fdo::Error::IOError(err.to_string()))?
+            .map_err(|err| GPUError::IOError(err.to_string()))?
             .trim()
             .parse::<f64>()
-            // convert the ParseIntError to a zbus::fdo::Error
-            .map_err(|err| fdo::Error::Failed(err.to_string()))?;
+            .map_err(|err| GPUError::FailedOperation(err.to_string()))?;
 
         return Ok(value);
     }
 
-    fn set_clock_value_mhz_min(&mut self, value: f64) -> fdo::Result<()> {
+    fn set_clock_value_mhz_min(&mut self, value: f64) -> GPUResult<()> {
         if value == 0.0 {
-            return Err(fdo::Error::InvalidArgs(
+            return Err(GPUError::InvalidArgument(
                 "Cowardly refusing to set clock to 0MHz".to_string(),
             ));
         }
@@ -152,32 +142,28 @@ impl GPUIface for IntelGPU {
 
         // Write the value
         file
-            // convert the std::io::Error to a zbus::fdo::Error
-            .map_err(|err| fdo::Error::Failed(err.to_string()))?
+            .map_err(|err| GPUError::FailedOperation(err.to_string()))?
             .write_all(value.to_string().as_bytes())
-            // convert the std::io::Error to a zbus::fdo::Error
-            .map_err(|err| fdo::Error::IOError(err.to_string()))?;
+            .map_err(|err| GPUError::IOError(err.to_string()))?;
 
         return Ok(());
     }
 
-    fn clock_value_mhz_max(&self) -> fdo::Result<f64> {
+    fn clock_value_mhz_max(&self) -> GPUResult<f64> {
         let path = format!("{0}/{1}", self.path(), "gt_max_freq_mhz");
         let result = fs::read_to_string(path);
         let value = result
-            // convert the std::io::Error to a zbus::fdo::Error
-            .map_err(|err| fdo::Error::IOError(err.to_string()))?
+            .map_err(|err| GPUError::IOError(err.to_string()))?
             .trim()
             .parse::<f64>()
-            // convert the ParseIntError to a zbus::fdo::Error
-            .map_err(|err| fdo::Error::Failed(err.to_string()))?;
+            .map_err(|err| GPUError::FailedOperation(err.to_string()))?;
 
         return Ok(value);
     }
 
-    fn set_clock_value_mhz_max(&mut self, value: f64) -> fdo::Result<()> {
+    fn set_clock_value_mhz_max(&mut self, value: f64) -> GPUResult<()> {
         if value == 0.0 {
-            return Err(fdo::Error::InvalidArgs(
+            return Err(GPUError::InvalidArgument(
                 "Cowardly refusing to set clock to 0MHz".to_string(),
             ));
         }
@@ -188,20 +174,18 @@ impl GPUIface for IntelGPU {
 
         // Write the value
         file
-            // convert the std::io::Error to a zbus::fdo::Error
-            .map_err(|err| fdo::Error::Failed(err.to_string()))?
+            .map_err(|err| GPUError::FailedOperation(err.to_string()))?
             .write_all(value.to_string().as_bytes())
-            // convert the std::io::Error to a zbus::fdo::Error
-            .map_err(|err| fdo::Error::IOError(err.to_string()))?;
+            .map_err(|err| GPUError::IOError(err.to_string()))?;
 
         return Ok(());
     }
 
-    fn manual_clock(&self) -> fdo::Result<bool> {
+    fn manual_clock(&self) -> GPUResult<bool> {
         return Ok(self.manual_clock.clone());
     }
 
-    fn set_manual_clock(&mut self, enabled: bool) -> fdo::Result<()> {
+    fn set_manual_clock(&mut self, enabled: bool) -> GPUResult<()> {
         self.manual_clock = enabled;
         return Ok(());
     }

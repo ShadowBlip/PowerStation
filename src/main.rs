@@ -5,6 +5,9 @@ use zbus::Connection;
 use crate::constants::{BUS_NAME, CPU_PATH, GPU_PATH};
 use crate::performance::cpu::cpu;
 use crate::performance::gpu::dbus;
+use crate::dbus::gpu::GPUBus;
+use crate::dbus::gpu::get_connectors;
+use crate::dbus::gpu::get_gpus;
 
 mod constants;
 mod performance;
@@ -31,7 +34,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Discover all GPUs and Generate GPU objects to serve
     let mut gpu_obj_paths: Vec<String> = Vec::new();
     // TODO: There must be a better way to do this
-    for mut card in dbus::get_gpus() {
+    for mut card in get_gpus() {
         // Build the DBus object path for this card
         let card_name = card.name().as_str().title();
         let gpu_path = format!("{0}/{1}", GPU_PATH, card_name);
@@ -47,7 +50,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
         // Get GPU connectors from the card and serve them on DBus
         let mut connector_paths: Vec<String> = Vec::new();
-        let connectors = dbus::get_connectors(card.name());
+        let connectors = get_connectors(card.name());
         for connector in connectors {
             let name = connector.name.clone().replace('-', "/");
             let port_path = format!("{0}/{1}", gpu_path, name);
@@ -65,7 +68,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }
 
     // Create a GPU Bus instance which allows card enumeration
-    let gpu_bus = dbus::GPUBus::new(gpu_obj_paths);
+    let gpu_bus = GPUBus::new(gpu_obj_paths);
     connection.object_server().at(GPU_PATH, gpu_bus).await?;
 
     // Request a name

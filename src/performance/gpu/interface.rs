@@ -1,7 +1,3 @@
-// TODO: remove zbus from here: this should be the interface that is not bound to dbus
-
-use zbus::fdo;
-
 use std::sync::{Arc, Mutex};
 use crate::performance::gpu::tdp::TDPDevice;
 
@@ -20,6 +16,7 @@ impl Into<String> for GPUError {
 
 pub type GPUResult<T> = Result<T, GPUError>;
 
+/// Represents the data contained in /sys/class/drm/cardX
 pub trait GPUIface: Send + Sync {
 
     fn get_tdp_interface(&self) -> Option<Arc<Mutex<dyn TDPDevice>>>;
@@ -36,12 +33,12 @@ pub trait GPUIface: Send + Sync {
     fn subdevice_id(&self) -> String;
     fn subvendor_id(&self) -> String;
     fn revision_id(&self) -> String;
-    fn clock_limit_mhz_min(&self) -> fdo::Result<f64>;
-    fn clock_limit_mhz_max(&self) -> fdo::Result<f64>;
-    fn clock_value_mhz_min(&self) -> fdo::Result<f64>;
-    fn set_clock_value_mhz_min(&mut self, value: f64) -> fdo::Result<()>;
-    fn clock_value_mhz_max(&self) -> fdo::Result<f64>;
-    fn set_clock_value_mhz_max(&mut self, value: f64) -> fdo::Result<()>;
-    fn manual_clock(&self) -> fdo::Result<bool>;
-    fn set_manual_clock(&mut self, enabled: bool) -> fdo::Result<()>;
+    fn clock_limit_mhz_min(&self) -> GPUResult<f64>;
+    fn clock_limit_mhz_max(&self) -> GPUResult<f64>;
+    fn clock_value_mhz_min(&self) -> GPUResult<f64>;
+    fn set_clock_value_mhz_min(&mut self, value: f64) -> GPUResult<()>;
+    fn clock_value_mhz_max(&self) -> GPUResult<f64>;
+    fn set_clock_value_mhz_max(&mut self, value: f64) -> GPUResult<()>;
+    fn manual_clock(&self) -> GPUResult<bool>;
+    fn set_manual_clock(&mut self, enabled: bool) -> GPUResult<()>;
 }

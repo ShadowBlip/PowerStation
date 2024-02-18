@@ -7,8 +7,8 @@ use zbus::fdo;
 use zbus::zvariant::ObjectPath;
 use zbus_macros::dbus_interface;
 
-use crate::performance::gpu::interface::{GPUResult, GPUIface};
-use crate::performance::apu::dbus::GPUTDPDBusIface;
+use crate::performance::gpu::interface::{GPUError, GPUIface};
+use crate::performance::gpu::dbus::tdp::GPUTDPDBusIface;
 use crate::performance::gpu::amd::amdgpu::AMDGPU;
 use crate::performance::gpu::connector::Connector;
 use crate::performance::gpu::intel::intelgpu::IntelGPU;
@@ -16,14 +16,24 @@ use crate::performance::gpu::intel::intelgpu::IntelGPU;
 const DRM_PATH: &str = "/sys/class/drm";
 const PCI_IDS_PATH: &str = "/usr/share/hwdata/pci.ids";
 
-/// Container for different types of supported GPUs
-/// https://stackoverflow.com/questions/53216593/vec-of-generics-of-different-concrete-types
-pub struct GPU {
+impl Into<fdo::Error> for GPUError {
+    fn into(self) -> zbus::fdo::Error {
+        match &self {
+            Self::FailedOperation(err) => fdo::Error::Failed(err.to_string()),
+            Self::FeatureUnsupported => fdo::Error::Failed(String::from("Unsupported feature")),
+            Self::InvalidArgument(err) => fdo::Error::Failed(err.to_string()),
+            Self::IOError(err) => fdo::Error::IOError(err.to_string())
+        }
+    }
+}
+
+/// 
+pub struct GPUDBusInterface {
     connector_paths: Vec<String>,
     gpu_obj: Arc<Mutex<dyn GPUIface>>
 }
 
-impl GPU {
+impl GPUDBusInterface {
     pub fn new(gpu: Arc<Mutex<dyn GPUIface>>) -> Self {
         Self {
             gpu_obj: gpu,
@@ -47,14 +57,14 @@ impl GPU {
 
     pub fn get_tdp_interface(&self) -> Option<GPUTDPDBusIface> {
         match self.gpu_obj.lock().unwrap().get_tdp_interface() {
-            Some(tdp) => Some(crate::performance::apu::dbus::GPUTDPDBusIface::new(tdp)),
+            Some(tdp) => Some(GPUTDPDBusIface::new(tdp)),
             None => None
         }
     }
 }
 
 #[dbus_interface(name = "org.shadowblip.GPU.Card")]
-impl GPU {
+impl GPUDBusInterface {
     
     #[dbus_interface(property)]
     pub fn name(&self) -> String {
@@ -118,68 +128,43 @@ impl GPU {
 
     #[dbus_interface(property)]
     fn clock_limit_mhz_min(&self) -> fdo::Result<f64> {
-        self.gpu_obj.lock().unwrap().clock_limit_mhz_min()
+        self.gpu_obj.lock().unwrap().clock_limit_mhz_min().map_err(|err| err.into())
     }
 
     #[dbus_interface(property)]
     fn clock_limit_mhz_max(&self) -> fdo::Result<f64> {
-        self.gpu_obj.lock().unwrap().clock_limit_mhz_max()
+        self.gpu_obj.lock().unwrap().clock_limit_mhz_max().map_err(|err| err.into())
     }
 
     #[dbus_interface(property)]
     fn clock_value_mhz_min(&self) -> fdo::Result<f64> {
-        self.gpu_obj.lock().unwrap().clock_value_mhz_min()
+        self.gpu_obj.lock().unwrap().clock_value_mhz_min().map_err(|err| err.into())
     }
 
     #[dbus_interface(property)]
     fn set_clock_value_mhz_min(&mut self, value: f64) -> fdo::Result<()> {
-        self.gpu_obj.lock().unwrap().set_clock_value_mhz_min(value)
+        self.gpu_obj.lock().unwrap().set_clock_value_mhz_min(value).map_err(|err| err.into())
     }
 
     #[dbus_interface(property)]
     fn clock_value_mhz_max(&self) -> fdo::Result<f64> {
-        self.gpu_obj.lock().unwrap().clock_value_mhz_max()
+        self.gpu_obj.lock().unwrap().clock_value_mhz_max().map_err(|err| err.into())
     }
 
     #[dbus_interface(property)]
     fn set_clock_value_mhz_max(&mut self, value: f64) -> fdo::Result<()> {
-        self.gpu_obj.lock().unwrap().set_clock_value_mhz_max(value)
+        self.gpu_obj.lock().unwrap().set_clock_value_mhz_max(value).map_err(|err| err.into())
     }
 
     #[dbus_interface(property)]
     fn manual_clock(&self) -> fdo::Result<bool> {
-        self.gpu_obj.lock().unwrap().manual_clock()
+        self.gpu_obj.lock().unwrap().manual_clock().map_err(|err| err.into())
     }
 
     #[dbus_interface(property)]
     fn set_manual_clock(&mut self, enabled: bool) -> fdo::Result<()> {
-        self.gpu_obj.lock().unwrap().set_manual_clock(enabled)
+        self.gpu_obj.lock().unwrap().set_manual_clock(enabled).map_err(|err| err.into())
     }
-}
-
-/// Represents the data contained in /sys/class/drm/cardX
-pub trait GPUDBusInterface {
-    fn name(&self) -> String;
-    fn path(&self) -> String;
-    fn class(&self) -> String;
-    fn class_id(&self) -> String;
-    fn vendor(&self) -> String;
-    fn vendor_id(&self) -> String;
-    fn device(&self) -> String;
-    fn device_id(&self) -> String;
-    fn subdevice(&self) -> String;
-    fn subdevice_id(&self) -> String;
-    fn subvendor_id(&self) -> String;
-    fn revision_id(&self) -> String;
-    fn manual_clock(&self) -> fdo::Result<bool>;
-    fn set_manual_clock(&mut self, enabled: bool) -> fdo::Result<()>;
-    fn clock_limit_mhz_min(&self) -> fdo::Result<f64>;
-    fn clock_limit_mhz_max(&self) -> fdo::Result<f64>;
-    fn clock_value_mhz_min(&self) -> fdo::Result<f64>;
-    fn set_clock_value_mhz_min(&mut self, value: f64) -> fdo::Result<()>;
-    fn clock_value_mhz_max(&self) -> fdo::Result<f64>;
-    fn set_clock_value_mhz_max(&mut self, value: f64) -> fdo::Result<()>;
-    fn enumerate_connectors(&self) -> fdo::Result<Vec<ObjectPath>>;
 }
 
 /// Used to enumerate all GPU cards over DBus
@@ -212,7 +197,7 @@ impl GPUBus {
 }
 
 /// Returns a list of all detected gpu devices
-pub fn get_gpus() -> Vec<GPU> {
+pub fn get_gpus() -> Vec<GPUDBusInterface> {
     let mut gpus = vec![];
     let paths = fs::read_dir(DRM_PATH).unwrap();
     for path in paths {
@@ -240,7 +225,7 @@ pub fn get_gpus() -> Vec<GPU> {
 }
 
 /// Returns the GPU instance for the given path in /sys/class/drm
-pub fn get_gpu(path: String) -> Result<GPU, std::io::Error> {
+pub fn get_gpu(path: String) -> Result<GPUDBusInterface, std::io::Error> {
     let filename = path.split("/").last().unwrap();
     let file_prefix = format!("{0}/{1}", path, "device");
     let class_id = fs::read_to_string(format!("{0}/{1}", file_prefix, "class"))?
@@ -352,7 +337,7 @@ pub fn get_gpu(path: String) -> Result<GPU, std::io::Error> {
         | "AuthenticAMD"
         | "AuthenticAMD Advanced Micro Devices, Inc."
         | "Advanced Micro Devices, Inc. [AMD/ATI]" => Ok(
-            GPU::new(
+            GPUDBusInterface::new(
                 Arc::new(
                     Mutex::new(
                         AMDGPU {
@@ -376,7 +361,7 @@ pub fn get_gpu(path: String) -> Result<GPU, std::io::Error> {
         ),
         // Intel Implementation
         "Intel" | "GenuineIntel" | "Intel Corporation" => Ok(
-            GPU::new(
+            GPUDBusInterface::new(
                 Arc::new(
                     Mutex::new(
                         IntelGPU {

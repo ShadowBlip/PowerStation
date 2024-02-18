@@ -1,5 +1,3 @@
-// TODO: totally remove dbus from here
-
 use std::{
     fs::{self, OpenOptions},
     io::Write,
@@ -7,10 +5,10 @@ use std::{
         Arc, Mutex
     }
 };
-use zbus::fdo;
 
 use crate::performance::gpu::interface::GPUIface;
 use crate::performance::gpu::{amd, tdp::TDPDevice};
+use crate::performance::gpu::interface::{GPUError, GPUResult};
 
 pub struct AMDGPU {
     pub name: String,
@@ -96,34 +94,31 @@ impl GPUIface for AMDGPU {
         self.revision_id.clone()
     }
 
-    fn clock_limit_mhz_min(&self) -> fdo::Result<f64> {
+    fn clock_limit_mhz_min(&self) -> GPUResult<f64> {
         let limits = get_clock_limits(self.path())
-            // convert the std::io::Error to a zbus::fdo::Error
-            .map_err(|err| fdo::Error::IOError(err.to_string()))?;
+            .map_err(|err| GPUError::IOError(err.to_string()))?;
 
         let (min, _) = limits;
         Ok(min)
     }
 
-    fn clock_limit_mhz_max(&self) -> fdo::Result<f64> {
+    fn clock_limit_mhz_max(&self) -> GPUResult<f64> {
         let limits = get_clock_limits(self.path())
-            // convert the std::io::Error to a zbus::fdo::Error
-            .map_err(|err| fdo::Error::IOError(err.to_string()))?;
+            .map_err(|err| GPUError::IOError(err.to_string()))?;
 
         let (_, max) = limits;
         Ok(max)
     }
 
-    fn clock_value_mhz_min(&self) -> fdo::Result<f64> {
+    fn clock_value_mhz_min(&self) -> GPUResult<f64> {
         let values = get_clock_values(self.path())
-            // convert the std::io::Error to a zbus::fdo::Error
-            .map_err(|err| fdo::Error::IOError(err.to_string()))?;
+            .map_err(|err| GPUError::IOError(err.to_string()))?;
 
         let (min, _) = values;
         Ok(min)
     }
 
-    fn set_clock_value_mhz_min(&mut self, value: f64) -> fdo::Result<()> {
+    fn set_clock_value_mhz_min(&mut self, value: f64) -> GPUResult<()> {
         // Build the clock command to send
         // https://www.kernel.org/doc/html/v5.9/gpu/amdgpu.html#pp-od-clk-voltage
         let command = format!("s 0 {}\n", value);
@@ -139,35 +134,30 @@ impl GPUIface for AMDGPU {
             path.clone()
         );
         file
-            // convert the std::io::Error to a zbus::fdo::Error
-            .map_err(|err| fdo::Error::Failed(err.to_string()))?
+            .map_err(|err| GPUError::FailedOperation(err.to_string()))?
             .write_all(command.as_bytes())
-            // convert the std::io::Error to a zbus::fdo::Error
-            .map_err(|err| fdo::Error::IOError(err.to_string()))?;
+            .map_err(|err| GPUError::IOError(err.to_string()))?;
 
         // Write the "commit" command
         log::debug!("Writing value '{}' to: {}", "c", path.clone());
         let file = OpenOptions::new().write(true).open(path);
         file
-            // convert the std::io::Error to a zbus::fdo::Error
-            .map_err(|err| fdo::Error::Failed(err.to_string()))?
+            .map_err(|err| GPUError::FailedOperation(err.to_string()))?
             .write_all("c\n".as_bytes())
-            // convert the std::io::Error to a zbus::fdo::Error
-            .map_err(|err| fdo::Error::IOError(err.to_string()))?;
+            .map_err(|err| GPUError::IOError(err.to_string()))?;
 
         Ok(())
     }
 
-    fn clock_value_mhz_max(&self) -> fdo::Result<f64> {
+    fn clock_value_mhz_max(&self) -> GPUResult<f64> {
         let values = get_clock_values(self.path())
-            // convert the std::io::Error to a zbus::fdo::Error
-            .map_err(|err| fdo::Error::IOError(err.to_string()))?;
+            .map_err(|err| GPUError::IOError(err.to_string()))?;
 
         let (_, max) = values;
         Ok(max)
     }
 
-    fn set_clock_value_mhz_max(&mut self, value: f64) -> fdo::Result<()> {
+    fn set_clock_value_mhz_max(&mut self, value: f64) -> GPUResult<()> {
         // Build the clock command to send
         // https://www.kernel.org/doc/html/v5.9/gpu/amdgpu.html#pp-od-clk-voltage
         let command = format!("s 1 {}\n", value);
@@ -178,25 +168,21 @@ impl GPUIface for AMDGPU {
 
         // Write the value
         file
-            // convert the std::io::Error to a zbus::fdo::Error
-            .map_err(|err| fdo::Error::Failed(err.to_string()))?
+            .map_err(|err| GPUError::FailedOperation(err.to_string()))?
             .write_all(command.as_bytes())
-            // convert the std::io::Error to a zbus::fdo::Error
-            .map_err(|err| fdo::Error::IOError(err.to_string()))?;
+            .map_err(|err| GPUError::IOError(err.to_string()))?;
 
         // Write the "commit" command
         let file = OpenOptions::new().write(true).open(path);
         file
-            // convert the std::io::Error to a zbus::fdo::Error
-            .map_err(|err| fdo::Error::Failed(err.to_string()))?
+            .map_err(|err| GPUError::FailedOperation(err.to_string()))?
             .write_all("c\n".as_bytes())
-            // convert the std::io::Error to a zbus::fdo::Error
-            .map_err(|err| fdo::Error::IOError(err.to_string()))?;
+            .map_err(|err| GPUError::IOError(err.to_string()))?;
 
         Ok(())
     }
 
-    fn manual_clock(&self) -> fdo::Result<bool> {
+    fn manual_clock(&self) -> GPUResult<bool> {
         let path = format!(
             "{0}/{1}",
             self.path(),
@@ -205,15 +191,14 @@ impl GPUIface for AMDGPU {
 
         let result = fs::read_to_string(path);
         let status = result
-            // convert the std::io::Error to a zbus::fdo::Error
-            .map_err(|err| fdo::Error::IOError(err.to_string()))?
+            .map_err(|err| GPUError::IOError(err.to_string()))?
             .trim()
             .to_lowercase();
 
         Ok(status == "manual")
     }
 
-    fn set_manual_clock(&mut self, enabled: bool) -> fdo::Result<()> {
+    fn set_manual_clock(&mut self, enabled: bool) -> GPUResult<()> {
         let status = if enabled { "manual" } else { "auto" };
 
         // Open the sysfs file to write to
@@ -226,11 +211,9 @@ impl GPUIface for AMDGPU {
 
         // Write the value
         file
-            // convert the std::io::Error to a zbus::fdo::Error
-            .map_err(|err| fdo::Error::Failed(err.to_string()))?
+            .map_err(|err| GPUError::FailedOperation(err.to_string()))?
             .write_all(status.as_bytes())
-            // convert the std::io::Error to a zbus::fdo::Error
-            .map_err(|err| fdo::Error::IOError(err.to_string()))?;
+            .map_err(|err| GPUError::IOError(err.to_string()))?;
 
         Ok(())
     }
