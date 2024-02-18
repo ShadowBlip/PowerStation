@@ -1,10 +1,14 @@
+// TODO: change name, from GPU to GPUDBusInterface
+
 use std::fs::{self, File};
 use std::io::{prelude::*, BufReader};
+use std::sync::{Arc, Mutex};
 use zbus::fdo;
 use zbus::zvariant::ObjectPath;
 use zbus_macros::dbus_interface;
 
-use crate::performance::apu::dbus::DBusIface;
+use crate::performance::gpu::interface::{GPUResult, GPUIface};
+use crate::performance::apu::dbus::GPUTDPDBusIface;
 use crate::performance::gpu::amd::amdgpu::AMDGPU;
 use crate::performance::gpu::connector::Connector;
 use crate::performance::gpu::intel::intelgpu::IntelGPU;
@@ -14,35 +18,147 @@ const PCI_IDS_PATH: &str = "/usr/share/hwdata/pci.ids";
 
 /// Container for different types of supported GPUs
 /// https://stackoverflow.com/questions/53216593/vec-of-generics-of-different-concrete-types
-pub enum GPU {
-    AMD(AMDGPU),
-    Intel(IntelGPU),
+pub struct GPU {
+    connector_paths: Vec<String>,
+    gpu_obj: Arc<Mutex<dyn GPUIface>>
 }
 
 impl GPU {
-    pub fn get_tdp_interface(&self) -> Option<DBusIface> {
-        match &self {
-            Self::AMD(gpu_obj) => match gpu_obj.get_tdp_interface() {
-                Some(tdp) => Some(crate::performance::apu::dbus::spawn(tdp)),
-                None => None
-            },
-            Self::Intel(gpu_obj) => match gpu_obj.get_tdp_interface() {
-                Some(tdp) => Some(crate::performance::apu::dbus::spawn(tdp)),
-                None => None
-            },
+    pub fn new(gpu: Arc<Mutex<dyn GPUIface>>) -> Self {
+        Self {
+            gpu_obj: gpu,
+            connector_paths: vec![]
         }
     }
 
-    pub fn name(&self) -> String {
-        match &self {
-            Self::AMD(gpu_obj) => gpu_obj.name.clone(),
-            Self::Intel(gpu_obj) => gpu_obj.name.clone(),
+    /// Returns a list of DBus paths to all connectors
+    pub fn enumerate_connectors(&self) -> fdo::Result<Vec<ObjectPath>> {
+        Ok(
+            self.connector_paths
+                .iter()
+                .map(|path| ObjectPath::from_string_unchecked(path.clone()))
+                .collect()
+        )
+    }
+
+    pub fn set_connector_paths(&mut self, connector_paths: Vec<String>) {
+        self.connector_paths = connector_paths
+    }
+
+    pub fn get_tdp_interface(&self) -> Option<GPUTDPDBusIface> {
+        match self.gpu_obj.lock().unwrap().get_tdp_interface() {
+            Some(tdp) => Some(crate::performance::apu::dbus::GPUTDPDBusIface::new(tdp)),
+            None => None
         }
+    }
+}
+
+#[dbus_interface(name = "org.shadowblip.GPU.Card")]
+impl GPU {
+    
+    #[dbus_interface(property)]
+    pub fn name(&self) -> String {
+        self.gpu_obj.lock().unwrap().name()
+    }
+
+    #[dbus_interface(property)]
+    fn path(&self) -> String {
+        self.gpu_obj.lock().unwrap().path()
+    }
+
+    #[dbus_interface(property)]
+    fn class(&self) -> String {
+        self.gpu_obj.lock().unwrap().class()
+    }
+
+    #[dbus_interface(property)]
+    fn class_id(&self) -> String {
+        self.gpu_obj.lock().unwrap().class_id()
+    }
+
+    #[dbus_interface(property)]
+    fn vendor(&self) -> String {
+        self.gpu_obj.lock().unwrap().vendor()
+    }
+
+    #[dbus_interface(property)]
+    fn vendor_id(&self) -> String {
+        self.gpu_obj.lock().unwrap().vendor_id()
+    }
+
+    #[dbus_interface(property)]
+    fn device(&self) -> String {
+        self.gpu_obj.lock().unwrap().device()
+    }
+
+    #[dbus_interface(property)]
+    fn device_id(&self) -> String {
+        self.gpu_obj.lock().unwrap().device_id()
+    }
+
+    #[dbus_interface(property)]
+    fn subdevice(&self) -> String {
+        self.gpu_obj.lock().unwrap().subdevice()
+    }
+
+    #[dbus_interface(property)]
+    fn subdevice_id(&self) -> String {
+        self.gpu_obj.lock().unwrap().subdevice_id()
+    }
+
+    #[dbus_interface(property)]
+    fn subvendor_id(&self) -> String {
+        self.gpu_obj.lock().unwrap().subvendor_id()
+    }
+
+    #[dbus_interface(property)]
+    fn revision_id(&self) -> String {
+        self.gpu_obj.lock().unwrap().revision_id()
+    }
+
+    #[dbus_interface(property)]
+    fn clock_limit_mhz_min(&self) -> fdo::Result<f64> {
+        self.gpu_obj.lock().unwrap().clock_limit_mhz_min()
+    }
+
+    #[dbus_interface(property)]
+    fn clock_limit_mhz_max(&self) -> fdo::Result<f64> {
+        self.gpu_obj.lock().unwrap().clock_limit_mhz_max()
+    }
+
+    #[dbus_interface(property)]
+    fn clock_value_mhz_min(&self) -> fdo::Result<f64> {
+        self.gpu_obj.lock().unwrap().clock_value_mhz_min()
+    }
+
+    #[dbus_interface(property)]
+    fn set_clock_value_mhz_min(&mut self, value: f64) -> fdo::Result<()> {
+        self.gpu_obj.lock().unwrap().set_clock_value_mhz_min(value)
+    }
+
+    #[dbus_interface(property)]
+    fn clock_value_mhz_max(&self) -> fdo::Result<f64> {
+        self.gpu_obj.lock().unwrap().clock_value_mhz_max()
+    }
+
+    #[dbus_interface(property)]
+    fn set_clock_value_mhz_max(&mut self, value: f64) -> fdo::Result<()> {
+        self.gpu_obj.lock().unwrap().set_clock_value_mhz_max(value)
+    }
+
+    #[dbus_interface(property)]
+    fn manual_clock(&self) -> fdo::Result<bool> {
+        self.gpu_obj.lock().unwrap().manual_clock()
+    }
+
+    #[dbus_interface(property)]
+    fn set_manual_clock(&mut self, enabled: bool) -> fdo::Result<()> {
+        self.gpu_obj.lock().unwrap().set_manual_clock(enabled)
     }
 }
 
 /// Represents the data contained in /sys/class/drm/cardX
-pub trait GPUDBusInterfaceGPU {
+pub trait GPUDBusInterface {
     fn name(&self) -> String;
     fn path(&self) -> String;
     fn class(&self) -> String;
@@ -235,48 +351,56 @@ pub fn get_gpu(path: String) -> Result<GPU, std::io::Error> {
         "AMD"
         | "AuthenticAMD"
         | "AuthenticAMD Advanced Micro Devices, Inc."
-        | "Advanced Micro Devices, Inc. [AMD/ATI]" => {
-            let gpu = AMDGPU {
-                connector_paths: Vec::new(),
-                name: filename.to_string(),
-                path: path.clone(),
-                class: class.to_string(),
-                class_id,
-                vendor: "AMD".to_string(),
-                vendor_id,
-                device: device.unwrap_or("".to_string()),
-                device_id,
-                device_type: "".to_string(),
-                subdevice: subdevice.unwrap_or("".to_string()),
-                subdevice_id,
-                subvendor_id,
-                revision_id,
-            };
-            return Ok(GPU::AMD(gpu));
-        }
+        | "Advanced Micro Devices, Inc. [AMD/ATI]" => Ok(
+            GPU::new(
+                Arc::new(
+                    Mutex::new(
+                        AMDGPU {
+                            name: filename.to_string(),
+                            path: path.clone(),
+                            class: class.to_string(),
+                            class_id,
+                            vendor: "AMD".to_string(),
+                            vendor_id,
+                            device: device.unwrap_or("".to_string()),
+                            device_id,
+                            device_type: "".to_string(),
+                            subdevice: subdevice.unwrap_or("".to_string()),
+                            subdevice_id,
+                            subvendor_id,
+                            revision_id,
+                        }
+                    )
+                )
+            )
+        ),
         // Intel Implementation
-        "Intel" | "GenuineIntel" | "Intel Corporation" => {
-            let gpu = IntelGPU {
-                connector_paths: Vec::new(),
-                name: filename.to_string(),
-                path: path.clone(),
-                class: class.to_string(),
-                class_id,
-                vendor: "Intel".to_string(),
-                vendor_id,
-                device: device.unwrap_or("".to_string()),
-                device_id,
-                device_type: "".to_string(),
-                subdevice: subdevice.unwrap_or("".to_string()),
-                subdevice_id,
-                subvendor_id,
-                revision_id,
-                manual_clock: true,
-            };
-            return Ok(GPU::Intel(gpu));
-        }
+        "Intel" | "GenuineIntel" | "Intel Corporation" => Ok(
+            GPU::new(
+                Arc::new(
+                    Mutex::new(
+                        IntelGPU {
+                            name: filename.to_string(),
+                            path: path.clone(),
+                            class: class.to_string(),
+                            class_id,
+                            vendor: "Intel".to_string(),
+                            vendor_id,
+                            device: device.unwrap_or("".to_string()),
+                            device_id,
+                            device_type: "".to_string(),
+                            subdevice: subdevice.unwrap_or("".to_string()),
+                            subdevice_id,
+                            subvendor_id,
+                            revision_id,
+                            manual_clock: true,
+                        }
+                    )
+                )
+            )
+        ),
         _ => {
-            return Err(std::io::Error::new(
+            Err(std::io::Error::new(
                 std::io::ErrorKind::Unsupported,
                 "Unsupported vendor",
             ))

@@ -1,3 +1,5 @@
+// TODO: totally remove dbus from here
+
 use std::{
     fs::{self, OpenOptions},
     io::Write,
@@ -5,14 +7,12 @@ use std::{
         Arc, Mutex
     }
 };
-use zbus::{fdo, zvariant::ObjectPath};
-use zbus_macros::dbus_interface;
+use zbus::fdo;
 
+use crate::performance::gpu::interface::GPUIface;
 use crate::performance::gpu::{amd, tdp::TDPDevice};
-use crate::performance::gpu::dbus::GPUDBusInterfaceGPU;
 
 pub struct AMDGPU {
-    pub connector_paths: Vec<String>,
     pub name: String,
     pub path: String,
     pub class: String,
@@ -28,9 +28,11 @@ pub struct AMDGPU {
     pub revision_id: String,
 }
 
-impl AMDGPU {
+
+impl GPUIface for AMDGPU {
+
     /// Returns the TDP DBus interface for this GPU
-    pub fn get_tdp_interface(&self) -> Option<Arc<Mutex<dyn TDPDevice>>> {
+    fn get_tdp_interface(&self) -> Option<Arc<Mutex<dyn TDPDevice>>> {
         match self.class.as_str() {
             "integrated" => Some(
                 Arc::new(
@@ -45,83 +47,55 @@ impl AMDGPU {
             _ => None,
         }
     }
-}
-
-#[dbus_interface(name = "org.shadowblip.GPU.Card")]
-impl GPUDBusInterfaceGPU for AMDGPU {
-    /// Returns a list of DBus paths to all connectors
-    fn enumerate_connectors(&self) -> fdo::Result<Vec<ObjectPath>> {
-        let mut paths: Vec<ObjectPath> = Vec::new();
-
-        for path in &self.connector_paths {
-            let path = ObjectPath::from_string_unchecked(path.clone());
-            paths.push(path);
-        }
-
-        Ok(paths)
-    }
-
-    #[dbus_interface(property)]
+    
     fn name(&self) -> String {
         self.name.clone()
     }
 
-    #[dbus_interface(property)]
     fn path(&self) -> String {
         self.path.clone()
     }
 
-    #[dbus_interface(property)]
     fn class(&self) -> String {
         self.class.clone()
     }
 
-    #[dbus_interface(property)]
     fn class_id(&self) -> String {
         self.class_id.clone()
     }
 
-    #[dbus_interface(property)]
     fn vendor(&self) -> String {
         self.vendor.clone()
     }
 
-    #[dbus_interface(property)]
     fn vendor_id(&self) -> String {
         self.vendor_id.clone()
     }
 
-    #[dbus_interface(property)]
     fn device(&self) -> String {
         self.device.clone()
     }
 
-    #[dbus_interface(property)]
     fn device_id(&self) -> String {
         self.device_id.clone()
     }
 
-    #[dbus_interface(property)]
     fn subdevice(&self) -> String {
         self.subdevice.clone()
     }
 
-    #[dbus_interface(property)]
     fn subdevice_id(&self) -> String {
         self.subdevice_id.clone()
     }
 
-    #[dbus_interface(property)]
     fn subvendor_id(&self) -> String {
         self.subvendor_id.clone()
     }
 
-    #[dbus_interface(property)]
     fn revision_id(&self) -> String {
         self.revision_id.clone()
     }
 
-    #[dbus_interface(property)]
     fn clock_limit_mhz_min(&self) -> fdo::Result<f64> {
         let limits = get_clock_limits(self.path())
             // convert the std::io::Error to a zbus::fdo::Error
@@ -131,7 +105,6 @@ impl GPUDBusInterfaceGPU for AMDGPU {
         Ok(min)
     }
 
-    #[dbus_interface(property)]
     fn clock_limit_mhz_max(&self) -> fdo::Result<f64> {
         let limits = get_clock_limits(self.path())
             // convert the std::io::Error to a zbus::fdo::Error
@@ -141,7 +114,6 @@ impl GPUDBusInterfaceGPU for AMDGPU {
         Ok(max)
     }
 
-    #[dbus_interface(property)]
     fn clock_value_mhz_min(&self) -> fdo::Result<f64> {
         let values = get_clock_values(self.path())
             // convert the std::io::Error to a zbus::fdo::Error
@@ -151,7 +123,6 @@ impl GPUDBusInterfaceGPU for AMDGPU {
         Ok(min)
     }
 
-    #[dbus_interface(property)]
     fn set_clock_value_mhz_min(&mut self, value: f64) -> fdo::Result<()> {
         // Build the clock command to send
         // https://www.kernel.org/doc/html/v5.9/gpu/amdgpu.html#pp-od-clk-voltage
@@ -187,7 +158,6 @@ impl GPUDBusInterfaceGPU for AMDGPU {
         Ok(())
     }
 
-    #[dbus_interface(property)]
     fn clock_value_mhz_max(&self) -> fdo::Result<f64> {
         let values = get_clock_values(self.path())
             // convert the std::io::Error to a zbus::fdo::Error
@@ -197,7 +167,6 @@ impl GPUDBusInterfaceGPU for AMDGPU {
         Ok(max)
     }
 
-    #[dbus_interface(property)]
     fn set_clock_value_mhz_max(&mut self, value: f64) -> fdo::Result<()> {
         // Build the clock command to send
         // https://www.kernel.org/doc/html/v5.9/gpu/amdgpu.html#pp-od-clk-voltage
@@ -227,7 +196,6 @@ impl GPUDBusInterfaceGPU for AMDGPU {
         Ok(())
     }
 
-    #[dbus_interface(property)]
     fn manual_clock(&self) -> fdo::Result<bool> {
         let path = format!(
             "{0}/{1}",
@@ -245,7 +213,6 @@ impl GPUDBusInterfaceGPU for AMDGPU {
         Ok(status == "manual")
     }
 
-    #[dbus_interface(property)]
     fn set_manual_clock(&mut self, enabled: bool) -> fdo::Result<()> {
         let status = if enabled { "manual" } else { "auto" };
 

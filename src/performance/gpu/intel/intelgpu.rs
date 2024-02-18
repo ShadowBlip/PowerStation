@@ -1,3 +1,5 @@
+// TODO: totally remove dbus from here
+
 use std::{
     fs::{self, OpenOptions},
     io::Write,
@@ -7,13 +9,11 @@ use std::{
 };
 
 use zbus::{fdo, zvariant::ObjectPath};
-use zbus_macros::dbus_interface;
 
+use crate::performance::gpu::interface::GPUIface;
 use crate::performance::gpu::{intel, tdp::TDPDevice};
-use crate::performance::gpu::dbus::GPUDBusInterfaceGPU;
 
 pub struct IntelGPU {
-    pub connector_paths: Vec<String>,
     pub name: String,
     pub path: String,
     pub class: String,
@@ -30,9 +30,11 @@ pub struct IntelGPU {
     pub manual_clock: bool,
 }
 
-impl IntelGPU {
+
+impl GPUIface for IntelGPU {
+    
     /// Returns the TDP DBus interface for this GPU
-    pub fn get_tdp_interface(&self) -> Option<Arc<Mutex<dyn TDPDevice>>> {
+    fn get_tdp_interface(&self) -> Option<Arc<Mutex<dyn TDPDevice>>> {
         match self.class.as_str() {
             "integrated" => Some(
                 Arc::new(
@@ -46,83 +48,55 @@ impl IntelGPU {
             _ => None,
         }
     }
-}
 
-#[dbus_interface(name = "org.shadowblip.GPU.Card")]
-impl GPUDBusInterfaceGPU for IntelGPU {
-    /// Returns a list of DBus paths to all connectors
-    fn enumerate_connectors(&self) -> fdo::Result<Vec<ObjectPath>> {
-        let mut paths: Vec<ObjectPath> = Vec::new();
-
-        for path in &self.connector_paths {
-            let path = ObjectPath::from_string_unchecked(path.clone());
-            paths.push(path);
-        }
-
-        return Ok(paths);
-    }
-
-    #[dbus_interface(property)]
     fn name(&self) -> String {
         self.name.clone()
     }
 
-    #[dbus_interface(property)]
     fn path(&self) -> String {
         self.path.clone()
     }
 
-    #[dbus_interface(property)]
     fn class(&self) -> String {
         self.class.clone()
     }
 
-    #[dbus_interface(property)]
     fn class_id(&self) -> String {
         self.class_id.clone()
     }
 
-    #[dbus_interface(property)]
     fn vendor(&self) -> String {
         self.vendor.clone()
     }
 
-    #[dbus_interface(property)]
     fn vendor_id(&self) -> String {
         self.vendor_id.clone()
     }
 
-    #[dbus_interface(property)]
     fn device(&self) -> String {
         self.device.clone()
     }
 
-    #[dbus_interface(property)]
     fn device_id(&self) -> String {
         self.device_id.clone()
     }
 
-    #[dbus_interface(property)]
     fn subdevice(&self) -> String {
         self.subdevice.clone()
     }
 
-    #[dbus_interface(property)]
     fn subdevice_id(&self) -> String {
         self.subdevice_id.clone()
     }
 
-    #[dbus_interface(property)]
     fn subvendor_id(&self) -> String {
         self.subvendor_id.clone()
     }
 
-    #[dbus_interface(property)]
     fn revision_id(&self) -> String {
         self.revision_id.clone()
     }
 
-    #[dbus_interface(property)]
     fn clock_limit_mhz_min(&self) -> fdo::Result<f64> {
         let path = format!("{0}/{1}", self.path(), "gt_RPn_freq_mhz");
         let result = fs::read_to_string(path);
@@ -137,7 +111,6 @@ impl GPUDBusInterfaceGPU for IntelGPU {
         return Ok(limit);
     }
 
-    #[dbus_interface(property)]
     fn clock_limit_mhz_max(&self) -> fdo::Result<f64> {
         let path = format!("{0}/{1}", self.path(), "gt_RP0_freq_mhz");
         let result = fs::read_to_string(path);
@@ -152,7 +125,6 @@ impl GPUDBusInterfaceGPU for IntelGPU {
         return Ok(limit);
     }
 
-    #[dbus_interface(property)]
     fn clock_value_mhz_min(&self) -> fdo::Result<f64> {
         let path = format!("{0}/{1}", self.path(), "gt_min_freq_mhz");
         let result = fs::read_to_string(path);
@@ -167,7 +139,6 @@ impl GPUDBusInterfaceGPU for IntelGPU {
         return Ok(value);
     }
 
-    #[dbus_interface(property)]
     fn set_clock_value_mhz_min(&mut self, value: f64) -> fdo::Result<()> {
         if value == 0.0 {
             return Err(fdo::Error::InvalidArgs(
@@ -190,7 +161,6 @@ impl GPUDBusInterfaceGPU for IntelGPU {
         return Ok(());
     }
 
-    #[dbus_interface(property)]
     fn clock_value_mhz_max(&self) -> fdo::Result<f64> {
         let path = format!("{0}/{1}", self.path(), "gt_max_freq_mhz");
         let result = fs::read_to_string(path);
@@ -205,7 +175,6 @@ impl GPUDBusInterfaceGPU for IntelGPU {
         return Ok(value);
     }
 
-    #[dbus_interface(property)]
     fn set_clock_value_mhz_max(&mut self, value: f64) -> fdo::Result<()> {
         if value == 0.0 {
             return Err(fdo::Error::InvalidArgs(
@@ -228,12 +197,10 @@ impl GPUDBusInterfaceGPU for IntelGPU {
         return Ok(());
     }
 
-    #[dbus_interface(property)]
     fn manual_clock(&self) -> fdo::Result<bool> {
         return Ok(self.manual_clock.clone());
     }
 
-    #[dbus_interface(property)]
     fn set_manual_clock(&mut self, enabled: bool) -> fdo::Result<()> {
         self.manual_clock = enabled;
         return Ok(());

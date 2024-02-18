@@ -55,7 +55,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             log::debug!("Discovered connector on {}: {}", card_name, port_path);
             connection.object_server().at(port_path, connector).await?;
         }
-        card.connector_paths = connector_paths;
+        card.set_connector_paths(connector_paths);
 
         // Serve the GPU interface on DBus
         connection

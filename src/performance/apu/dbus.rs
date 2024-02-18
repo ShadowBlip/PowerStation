@@ -7,7 +7,7 @@ use zbus_macros::dbus_interface;
 use crate::performance::gpu::tdp::TDPError;
 use crate::performance::gpu::tdp::{TDPDevice, TDPResult};
 
-pub struct DBusIface {
+pub struct GPUTDPDBusIface {
     dev: Arc<Mutex<dyn TDPDevice>>
 }
 
@@ -22,14 +22,16 @@ impl Into<fdo::Error> for TDPError {
     }
 }
 
-pub fn spawn(dev: Arc<Mutex<dyn TDPDevice>>) -> DBusIface {
-    DBusIface {
-        dev
+impl GPUTDPDBusIface {
+    pub fn new(dev: Arc<Mutex<dyn TDPDevice>>) -> GPUTDPDBusIface {
+        GPUTDPDBusIface {
+            dev
+        }
     }
 }
 
 #[dbus_interface(name = "org.shadowblip.GPU.Card.TDP")]
-impl DBusIface {
+impl GPUTDPDBusIface {
 
     /// Get the currently set TDP value
     #[dbus_interface(property, name = "TDP")]
