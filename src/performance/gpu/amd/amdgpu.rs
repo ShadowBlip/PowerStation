@@ -146,13 +146,13 @@ impl GPUIface for AMDGPU {
 
         // Write the "commit" command
         log::debug!("Writing value '{}' to: {}", "c", path.clone());
-        let file = OpenOptions::new().write(true).open(path);
-        file
-            .map_err(|err| GPUError::FailedOperation(err.to_string()))?
-            .write_all("c\n".as_bytes())
-            .map_err(|err| GPUError::IOError(err.to_string()))?;
 
-        Ok(())
+        Ok(
+            OpenOptions::new().write(true).open(path)
+                .map_err(|err| GPUError::FailedOperation(err.to_string()))?
+                .write_all("c\n".as_bytes())
+                .map_err(|err| GPUError::IOError(err.to_string()))?
+        )
     }
 
     fn clock_value_mhz_max(&self) -> GPUResult<f64> {
@@ -179,13 +179,12 @@ impl GPUIface for AMDGPU {
             .map_err(|err| GPUError::IOError(err.to_string()))?;
 
         // Write the "commit" command
-        let file = OpenOptions::new().write(true).open(path);
-        file
-            .map_err(|err| GPUError::FailedOperation(err.to_string()))?
-            .write_all("c\n".as_bytes())
-            .map_err(|err| GPUError::IOError(err.to_string()))?;
-
-        Ok(())
+        Ok(
+            OpenOptions::new().write(true).open(path)
+                .map_err(|err| GPUError::FailedOperation(err.to_string()))?
+                .write_all("c\n".as_bytes())
+                .map_err(|err| GPUError::IOError(err.to_string()))?
+        )
     }
 
     fn manual_clock(&self) -> GPUResult<bool> {
@@ -213,15 +212,14 @@ impl GPUIface for AMDGPU {
             self.path(),
             "device/power_dpm_force_performance_level"
         );
-        let file = OpenOptions::new().write(true).open(path);
 
         // Write the value
-        file
-            .map_err(|err| GPUError::FailedOperation(err.to_string()))?
-            .write_all(status.as_bytes())
-            .map_err(|err| GPUError::IOError(err.to_string()))?;
-
-        Ok(())
+        Ok(
+            OpenOptions::new().write(true).open(path)
+                .map_err(|err| GPUError::FailedOperation(err.to_string()))?
+                .write_all(status.as_bytes())
+                .map_err(|err| GPUError::IOError(err.to_string()))?
+        )
     }
 }
 
