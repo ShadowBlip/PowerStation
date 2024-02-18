@@ -33,7 +33,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Discover all GPUs and Generate GPU objects to serve
     let mut gpu_obj_paths: Vec<String> = Vec::new();
-    // TODO: There must be a better way to do this
     for mut card in get_gpus() {
         // Build the DBus object path for this card
         let card_name = card.name().as_str().title();
