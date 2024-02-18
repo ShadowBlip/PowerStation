@@ -142,6 +142,7 @@ impl GPUTDPDBusIface {
         }
     }
 
+    #[dbus_interface(property)]
     fn set_power_profile(&mut self, profile: String) -> fdo::Result<()> {
         match self.dev.lock() {
             Ok(mut lck) => {
