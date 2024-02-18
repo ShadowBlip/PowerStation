@@ -37,7 +37,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     for mut card in get_gpus() {
         // Build the DBus object path for this card
         let card_name = card.name().as_str().title();
-        let gpu_path = format!("{0}/{1}", GPU_PATH, card_name);
+        let gpu_path = card.gpu_path();
         gpu_obj_paths.push(gpu_path.clone());
 
         // Get the TDP interface from the card and serve it on DBus

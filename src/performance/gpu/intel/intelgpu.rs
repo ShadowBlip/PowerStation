@@ -6,10 +6,12 @@ use std::{
     }
 };
 
+use crate::constants::PREFIX;
 use crate::performance::gpu::interface::GPUIface;
 use crate::performance::gpu::{intel, tdp::TDPDevice};
 use crate::performance::gpu::interface::{GPUError, GPUResult};
 
+#[derive(Debug, Clone)]
 pub struct IntelGPU {
     pub name: String,
     pub path: String,
@@ -30,6 +32,10 @@ pub struct IntelGPU {
 
 impl GPUIface for IntelGPU {
     
+    fn get_gpu_path(&self) -> String {
+        format!("{0}/GPU/{1}", PREFIX, self.name())
+    }
+
     /// Returns the TDP DBus interface for this GPU
     fn get_tdp_interface(&self) -> Option<Arc<Mutex<dyn TDPDevice>>> {
         match self.class.as_str() {

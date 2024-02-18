@@ -20,14 +20,15 @@ impl Into<fdo::Error> for GPUError {
     fn into(self) -> zbus::fdo::Error {
         match &self {
             Self::FailedOperation(err) => fdo::Error::Failed(err.to_string()),
-            Self::FeatureUnsupported => fdo::Error::Failed(String::from("Unsupported feature")),
+            //Self::FeatureUnsupported => fdo::Error::Failed(String::from("Unsupported feature")),
             Self::InvalidArgument(err) => fdo::Error::Failed(err.to_string()),
             Self::IOError(err) => fdo::Error::IOError(err.to_string())
         }
     }
 }
 
-/// 
+/// Represents the DBus for GPUs in the system 
+#[derive(Clone)]
 pub struct GPUDBusInterface {
     connector_paths: Vec<String>,
     gpu_obj: Arc<Mutex<dyn GPUIface>>
@@ -41,14 +42,8 @@ impl GPUDBusInterface {
         }
     }
 
-    /// Returns a list of DBus paths to all connectors
-    pub fn enumerate_connectors(&self) -> fdo::Result<Vec<ObjectPath>> {
-        Ok(
-            self.connector_paths
-                .iter()
-                .map(|path| ObjectPath::from_string_unchecked(path.clone()))
-                .collect()
-        )
+    pub fn gpu_path(&self) -> String {
+        self.gpu_obj.lock().unwrap().get_gpu_path()
     }
 
     pub fn set_connector_paths(&mut self, connector_paths: Vec<String>) {
@@ -66,6 +61,16 @@ impl GPUDBusInterface {
 #[dbus_interface(name = "org.shadowblip.GPU.Card")]
 impl GPUDBusInterface {
     
+    /// Returns a list of DBus paths to all connectors
+    pub fn enumerate_connectors(&self) -> fdo::Result<Vec<ObjectPath>> {
+        Ok(
+            self.connector_paths
+                .iter()
+                .map(|path| ObjectPath::from_string_unchecked(path.clone()))
+                .collect()
+        )
+    }
+
     #[dbus_interface(property)]
     pub fn name(&self) -> String {
         self.gpu_obj.lock().unwrap().name()

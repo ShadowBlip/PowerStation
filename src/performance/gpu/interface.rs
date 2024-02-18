@@ -2,7 +2,7 @@ use std::sync::{Arc, Mutex};
 use crate::performance::gpu::tdp::TDPDevice;
 
 pub enum GPUError {
-    FeatureUnsupported,
+    //FeatureUnsupported,
     FailedOperation(String),
     InvalidArgument(String),
     IOError(String),
@@ -20,6 +20,8 @@ pub type GPUResult<T> = Result<T, GPUError>;
 pub trait GPUIface: Send + Sync {
 
     fn get_tdp_interface(&self) -> Option<Arc<Mutex<dyn TDPDevice>>>;
+
+    fn get_gpu_path(&self) -> String;
 
     fn name(&self) -> String;
     fn path(&self) -> String;

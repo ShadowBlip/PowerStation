@@ -6,10 +6,12 @@ use std::{
     }
 };
 
+use crate::constants::GPU_PATH;
 use crate::performance::gpu::interface::GPUIface;
 use crate::performance::gpu::{amd, tdp::TDPDevice};
 use crate::performance::gpu::interface::{GPUError, GPUResult};
 
+#[derive(Debug, Clone)]
 pub struct AMDGPU {
     pub name: String,
     pub path: String,
@@ -28,6 +30,10 @@ pub struct AMDGPU {
 
 
 impl GPUIface for AMDGPU {
+
+    fn get_gpu_path(&self) -> String {
+        format!("{0}/{1}", GPU_PATH, self.name())
+    }
 
     /// Returns the TDP DBus interface for this GPU
     fn get_tdp_interface(&self) -> Option<Arc<Mutex<dyn TDPDevice>>> {
