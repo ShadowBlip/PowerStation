@@ -1,5 +1,3 @@
-// TODO: change name, from GPU to GPUDBusInterface
-
 use std::fs::{self, File};
 use std::io::{prelude::*, BufReader};
 use std::sync::{Arc, Mutex};
