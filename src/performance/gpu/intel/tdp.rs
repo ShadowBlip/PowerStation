@@ -67,7 +67,6 @@ impl TDPDevice for TDP {
         let path = "/sys/class/powercap/intel-rapl/intel-rapl:0/constraint_2_power_limit_uw";
         let result = fs::read_to_string(path);
         let content = result
-            // convert the std::io::Error to a zbus::fdo::Error
             .map_err(|err| TDPError::IOError(err.to_string()))?;
 
         // Parse the output to get the peak TDP
@@ -106,10 +105,8 @@ impl TDPDevice for TDP {
         let file = OpenOptions::new().write(true).open(path);
         let value = format!("{}", short_tdp);
         file
-            // convert the std::io::Error to a zbus::fdo::Error
             .map_err(|err| TDPError::FailedOperation(err.to_string()))?
             .write_all(value.as_bytes())
-            // convert the std::io::Error to a zbus::fdo::Error
             .map_err(|err| TDPError::IOError(err.to_string()))?;
 
         // Write the peak tdp
@@ -123,42 +120,22 @@ impl TDPDevice for TDP {
     }
 
     fn thermal_throttle_limit_c(&self) -> TDPResult<f64> {
-        /*
-        Err(fdo::Error::NotSupported(String::from(
-            "Thermal throttling not supported",
-        )))
-        */
-
+        log::error!("Thermal throttling not supported on intel gpu");
         Err(TDPError::FeatureUnsupported)
     }
 
     fn set_thermal_throttle_limit_c(&mut self, _limit: f64) -> TDPResult<()> {
-        /*
-        Err(fdo::Error::NotSupported(String::from(
-            "Thermal throttling not supported",
-        )))
-        */
-
+        log::error!("Thermal throttling not supported on intel gpu");
         Err(TDPError::FeatureUnsupported)
     }
 
     fn power_profile(&self) -> TDPResult<String> {
-        /*
-        Err(fdo::Error::NotSupported(String::from(
-            "Power profiles not supported",
-        )))
-        */
-
+        log::error!("Power profiles not supported on intel gpu");
         Err(TDPError::FeatureUnsupported)
     }
 
     fn set_power_profile(&mut self, _profile: String) -> TDPResult<()> {
-        /*
-        Err(fdo::Error::NotSupported(String::from(
-            "Power profiles not supported",
-        )))
-        */
-
+        log::error!("Power profiles not supported on intel gpu");
         Err(TDPError::FeatureUnsupported)
     }
 }
