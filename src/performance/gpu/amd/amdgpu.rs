@@ -1,12 +1,15 @@
 use std::{
     fs::{self, OpenOptions},
     io::Write,
+    sync::{
+        Arc, Mutex
+    }
 };
 use zbus::{fdo, zvariant::ObjectPath};
 use zbus_macros::dbus_interface;
 
-use crate::performance::gpu::amd;
-use crate::performance::gpu::DBusInterfaceForGPU;
+use crate::performance::gpu::{amd, tdp::TDPDevice};
+use crate::performance::gpu::dbus::GPUDBusInterfaceGPU;
 
 pub struct AMDGPU {
     pub connector_paths: Vec<String>,
@@ -27,19 +30,25 @@ pub struct AMDGPU {
 
 impl AMDGPU {
     /// Returns the TDP DBus interface for this GPU
-    pub fn get_tdp_interface(&self) -> Option<amd::tdp::TDP> {
+    pub fn get_tdp_interface(&self) -> Option<Arc<Mutex<dyn TDPDevice>>> {
         match self.class.as_str() {
-            "integrated" => Some(amd::tdp::TDP::new(
-                self.path.clone(),
-                self.device_id.clone(),
-            )),
+            "integrated" => Some(
+                Arc::new(
+                    Mutex::new(
+                        amd::tdp::TDP::new(
+                            self.path.clone(),
+                            self.device_id.clone()
+                        )
+                    )
+                )
+            ),
             _ => None,
         }
     }
 }
 
 #[dbus_interface(name = "org.shadowblip.GPU.Card")]
-impl DBusInterfaceForGPU for AMDGPU {
+impl GPUDBusInterfaceGPU for AMDGPU {
     /// Returns a list of DBus paths to all connectors
     fn enumerate_connectors(&self) -> fdo::Result<Vec<ObjectPath>> {
         let mut paths: Vec<ObjectPath> = Vec::new();

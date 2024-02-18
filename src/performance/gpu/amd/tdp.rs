@@ -1,8 +1,6 @@
 use libryzenadj::RyzenAdj;
-use zbus::fdo;
-use zbus_macros::dbus_interface;
 
-use crate::performance::gpu::tdp::DBusInterface;
+use crate::performance::gpu::tdp::{TDPDevice, TDPError, TDPResult};
 
 /// Steam Deck GPU ID
 const DEV_ID_VANGOGH: &str = "163f";
@@ -222,33 +220,30 @@ impl TDP {
     }
 }
 
-#[dbus_interface(name = "org.shadowblip.GPU.Card.TDP")]
-impl DBusInterface for TDP {
-    /// Get the currently set TDP value
-    #[dbus_interface(property, name = "TDP")]
-    fn tdp(&self) -> fdo::Result<f64> {
+impl TDPDevice for TDP {
+
+    fn tdp(&self) -> TDPResult<f64> {
         // Get the current stapm limit from ryzenadj
-        let stapm_limit =
-            TDP::get_stapm_limit(&self).map_err(|err| fdo::Error::Failed(err.to_string()))?;
-        Ok(stapm_limit.into())
+        match TDP::get_stapm_limit(&self) {
+            Ok(result) => Ok(result.into()),
+            Err(err) => Err(TDPError::FailedOperation(err.to_string()))
+        }
     }
 
-    /// Sets the given TDP value
-    #[dbus_interface(property, name = "TDP")]
-    fn set_tdp(&mut self, value: f64) -> fdo::Result<()> {
+    fn set_tdp(&mut self, value: f64) -> TDPResult<()> {
         log::debug!("Setting TDP to: {}", value);
         if value < 1.0 {
-            let err = "Cowardly refusing to set TDP less than 1";
-            log::warn!("{}", err);
-            return Err(fdo::Error::InvalidArgs(String::from(err)));
+            log::warn!("Cowardly refusing to set TDP less than 1W");
+            return Err(TDPError::InvalidArgument(format!("Cowardly refusing to set TDP less than 1W: provided {}W", value)));
         }
+
 
         // Get the current boost value before updating the STAPM limit. We will
         // use this value to also adjust the Fast PPT Limit.
         let fast_ppt_limit =
-            TDP::get_ppt_limit_fast(&self).map_err(|err| fdo::Error::Failed(err))?;
+            TDP::get_ppt_limit_fast(&self).map_err(|err| TDPError::FailedOperation(err))?;
         let mut fast_ppt_limit = fast_ppt_limit as f64;
-        let stapm_limit = TDP::get_stapm_limit(&self).map_err(|err| fdo::Error::Failed(err))?;
+        let stapm_limit = TDP::get_stapm_limit(&self).map_err(|err| TDPError::FailedOperation(err))?;
         let stapm_limit = stapm_limit as f64;
 
         // TODO: Is this a bug in ryzenadj? Sometimes fast_ppt_limit is ~0
@@ -262,28 +257,25 @@ impl DBusInterface for TDP {
 
         // Update the STAPM limit with the TDP value
         let limit: u32 = (value * 1000.0) as u32;
-        TDP::set_stapm_limit(self, limit).map_err(|err| fdo::Error::Failed(err))?;
+        TDP::set_stapm_limit(self, limit).map_err(|err| TDPError::FailedOperation(err))?;
 
         // Also update the slow PPT limit
-        TDP::set_ppt_limit_slow(self, limit).map_err(|err| fdo::Error::Failed(err))?;
+        TDP::set_ppt_limit_slow(self, limit).map_err(|err| TDPError::FailedOperation(err))?;
 
         // After successfully setting the STAPM limit, we also need to adjust the
         // Fast PPT Limit accordingly so it is *boost* distance away.
         let fast_ppt_limit = ((value + boost) * 1000.0) as u32;
-        TDP::set_ppt_limit_fast(self, fast_ppt_limit).map_err(|err| fdo::Error::Failed(err))?;
+        TDP::set_ppt_limit_fast(self, fast_ppt_limit).map_err(|err| TDPError::FailedOperation(err))?;
 
         Ok(())
     }
 
-    /// The TDP boost for AMD is the total difference between the Fast PPT Limit
-    /// and the STAPM limit.
-    #[dbus_interface(property)]
-    fn boost(&self) -> fdo::Result<f64> {
+    fn boost(&self) -> TDPResult<f64> {
         let fast_ppt_limit =
-            TDP::get_ppt_limit_fast(&self).map_err(|err| fdo::Error::Failed(String::from(err)))?;
+            TDP::get_ppt_limit_fast(&self).map_err(|err| TDPError::FailedOperation(String::from(err)))?;
         let fast_ppt_limit = fast_ppt_limit as f64;
         let stapm_limit =
-            TDP::get_stapm_limit(&self).map_err(|err| fdo::Error::Failed(String::from(err)))?;
+            TDP::get_stapm_limit(&self).map_err(|err| TDPError::FailedOperation(String::from(err)))?;
         let stapm_limit = stapm_limit as f64;
 
         let boost = fast_ppt_limit - stapm_limit;
@@ -291,49 +283,43 @@ impl DBusInterface for TDP {
         Ok(boost)
     }
 
-    #[dbus_interface(property)]
-    fn set_boost(&mut self, value: f64) -> fdo::Result<()> {
+    fn set_boost(&mut self, value: f64) -> TDPResult<()> {
         log::debug!("Setting boost to: {}", value);
         if value < 0.0 {
-            let err = "Cowardly refusing to set TDP Boost less than 0";
-            log::warn!("{}", err);
-            return Err(fdo::Error::InvalidArgs(String::from(err)));
+            log::warn!("Cowardly refusing to set TDP Boost less than 0W");
+            return Err(TDPError::InvalidArgument(format!("Cowardly refusing to set TDP Boost less than 0W: {}W provided", value)));
         }
 
         // Get the STAPM Limit so we can calculate what Fast PPT Limit to set.
-        let stapm_limit = TDP::get_stapm_limit(&self).map_err(|err| fdo::Error::Failed(err))?;
+        let stapm_limit = TDP::get_stapm_limit(&self).map_err(|err| TDPError::FailedOperation(err))?;
         let stapm_limit = stapm_limit as f64;
 
         // Set the new fast ppt limit
         let fast_ppt_limit = ((stapm_limit + value) * 1000.0) as u32;
-        TDP::set_ppt_limit_fast(self, fast_ppt_limit).map_err(|err| fdo::Error::Failed(err))?;
+        TDP::set_ppt_limit_fast(self, fast_ppt_limit).map_err(|err| TDPError::FailedOperation(err))?;
 
         Ok(())
     }
 
-    #[dbus_interface(property)]
-    fn thermal_throttle_limit_c(&self) -> fdo::Result<f64> {
-        let limit = TDP::get_thm_limit(&self).map_err(|err| fdo::Error::Failed(err.to_string()))?;
+    fn thermal_throttle_limit_c(&self) -> TDPResult<f64> {
+        let limit = TDP::get_thm_limit(&self).map_err(|err| TDPError::FailedOperation(err.to_string()))?;
         Ok(limit.into())
     }
 
-    #[dbus_interface(property)]
-    fn set_thermal_throttle_limit_c(&mut self, limit: f64) -> fdo::Result<()> {
+    fn set_thermal_throttle_limit_c(&mut self, limit: f64) -> TDPResult<()> {
         log::debug!("Setting thermal throttle limit to: {}", limit);
         let limit = limit as u32;
-        TDP::set_thm_limit(self, limit).map_err(|err| fdo::Error::Failed(err.to_string()))
+        TDP::set_thm_limit(self, limit).map_err(|err| TDPError::FailedOperation(err.to_string()))
     }
 
-    #[dbus_interface(property)]
-    fn power_profile(&self) -> fdo::Result<String> {
+    fn power_profile(&self) -> TDPResult<String> {
         Ok(self.profile.clone())
     }
 
-    #[dbus_interface(property)]
-    fn set_power_profile(&mut self, profile: String) -> fdo::Result<()> {
+    fn set_power_profile(&mut self, profile: String) -> TDPResult<()> {
         log::debug!("Setting power profile to: {}", profile);
         TDP::set_power_profile(&self, profile.clone())
-            .map_err(|err| fdo::Error::Failed(err.to_string()))?;
+            .map_err(|err| TDPError::FailedOperation(err.to_string()))?;
         self.profile = profile;
         Ok(())
     }

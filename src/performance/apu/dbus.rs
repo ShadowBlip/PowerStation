@@ -4,12 +4,28 @@ use zbus::fdo::Error;
 use zbus::{fdo, zvariant::ObjectPath};
 use zbus_macros::dbus_interface;
 
-use crate::performance::apu::tdp::TDPDevice;
-
-use super::tdp::TDPResult;
+use crate::performance::gpu::tdp::TDPError;
+use crate::performance::gpu::tdp::{TDPDevice, TDPResult};
 
 pub struct DBusIface {
     dev: Arc<Mutex<dyn TDPDevice>>
+}
+
+impl Into<fdo::Error> for TDPError {
+    fn into(self) -> zbus::fdo::Error {
+        match &self {
+            Self::FailedOperation(err) => fdo::Error::Failed(err.to_string()),
+            Self::FeatureUnsupported => fdo::Error::Failed(String::from("Unsupported feature")),
+            Self::InvalidArgument(err) => fdo::Error::Failed(err.to_string()),
+            Self::IOError(err) => fdo::Error::IOError(err.to_string())
+        }
+    }
+}
+
+pub fn spawn(dev: Arc<Mutex<dyn TDPDevice>>) -> DBusIface {
+    DBusIface {
+        dev
+    }
 }
 
 #[dbus_interface(name = "org.shadowblip.GPU.Card.TDP")]
@@ -21,12 +37,8 @@ impl DBusIface {
         match self.dev.lock() {
             Ok(lck) => {
                 match lck.tdp() {
-                    TDPResult::Ok(result) => {
-                        Ok(result)
-                    },
-                    TDPResult::Err(err) => {
-                        Err(Error::Failed(err.into()))
-                    }
+                    TDPResult::Ok(result) => Ok(result),
+                    TDPResult::Err(err) => Err(err.into())
                 }
             },
             Err(err) => {
@@ -41,12 +53,8 @@ impl DBusIface {
         match self.dev.lock() {
             Ok(mut lck) => {
                 match lck.set_tdp(value) {
-                    TDPResult::Ok(result) => {
-                        Ok(result)
-                    },
-                    TDPResult::Err(err) => {
-                        Err(Error::Failed(err.into()))
-                    }
+                    TDPResult::Ok(result) => Ok(result),
+                    TDPResult::Err(err) => Err(err.into())
                 }
             },
             Err(err) => {
@@ -62,12 +70,8 @@ impl DBusIface {
         match self.dev.lock() {
             Ok(lck) => {
                 match lck.boost() {
-                    TDPResult::Ok(result) => {
-                        Ok(result)
-                    },
-                    TDPResult::Err(err) => {
-                        Err(Error::Failed(err.into()))
-                    }
+                    TDPResult::Ok(result) => Ok(result),
+                    TDPResult::Err(err) => Err(err.into())
                 }
             },
             Err(err) => {
@@ -81,12 +85,8 @@ impl DBusIface {
         match self.dev.lock() {
             Ok(mut lck) => {
                 match lck.set_boost(value) {
-                    TDPResult::Ok(result) => {
-                        Ok(result)
-                    },
-                    TDPResult::Err(err) => {
-                        Err(Error::Failed(err.into()))
-                    }
+                    TDPResult::Ok(result) => Ok(result),
+                    TDPResult::Err(err) => Err(err.into())
                 }
             },
             Err(err) => {
@@ -100,12 +100,8 @@ impl DBusIface {
         match self.dev.lock() {
             Ok(lck) => {
                 match lck.thermal_throttle_limit_c() {
-                    TDPResult::Ok(result) => {
-                        Ok(result)
-                    },
-                    TDPResult::Err(err) => {
-                        Err(Error::Failed(err.into()))
-                    }
+                    TDPResult::Ok(result) => Ok(result),
+                    TDPResult::Err(err) => Err(err.into())
                 }
             },
             Err(err) => {
@@ -119,12 +115,8 @@ impl DBusIface {
         match self.dev.lock() {
             Ok(mut lck) => {
                 match lck.set_thermal_throttle_limit_c(limit) {
-                    TDPResult::Ok(result) => {
-                        Ok(result)
-                    },
-                    TDPResult::Err(err) => {
-                        Err(Error::Failed(err.into()))
-                    }
+                    TDPResult::Ok(result) => Ok(result),
+                    TDPResult::Err(err) => Err(err.into())
                 }
             },
             Err(err) => {
@@ -138,12 +130,8 @@ impl DBusIface {
         match self.dev.lock() {
             Ok(lck) => {
                 match lck.power_profile() {
-                    TDPResult::Ok(result) => {
-                        Ok(result)
-                    },
-                    TDPResult::Err(err) => {
-                        Err(Error::Failed(err.into()))
-                    }
+                    TDPResult::Ok(result) => Ok(result),
+                    TDPResult::Err(err) => Err(err.into())
                 }
             },
             Err(err) => {
@@ -156,12 +144,8 @@ impl DBusIface {
         match self.dev.lock() {
             Ok(mut lck) => {
                 match lck.set_power_profile(profile) {
-                    TDPResult::Ok(result) => {
-                        Ok(result)
-                    },
-                    TDPResult::Err(err) => {
-                        Err(Error::Failed(err.into()))
-                    }
+                    TDPResult::Ok(result) => Ok(result),
+                    TDPResult::Err(err) => Err(err.into())
                 }
             },
             Err(err) => {

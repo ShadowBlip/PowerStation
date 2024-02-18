@@ -4,15 +4,10 @@ use zbus::fdo;
 use zbus::zvariant::ObjectPath;
 use zbus_macros::dbus_interface;
 
+use crate::performance::apu::dbus::DBusIface;
 use crate::performance::gpu::amd::amdgpu::AMDGPU;
 use crate::performance::gpu::connector::Connector;
 use crate::performance::gpu::intel::intelgpu::IntelGPU;
-
-pub mod connector;
-pub mod tdp;
-
-pub mod amd;
-pub mod intel;
 
 const DRM_PATH: &str = "/sys/class/drm";
 const PCI_IDS_PATH: &str = "/usr/share/hwdata/pci.ids";
@@ -24,8 +19,30 @@ pub enum GPU {
     Intel(IntelGPU),
 }
 
+impl GPU {
+    pub fn get_tdp_interface(&self) -> Option<DBusIface> {
+        match &self {
+            Self::AMD(gpu_obj) => match gpu_obj.get_tdp_interface() {
+                Some(tdp) => Some(crate::performance::apu::dbus::spawn(tdp)),
+                None => None
+            },
+            Self::Intel(gpu_obj) => match gpu_obj.get_tdp_interface() {
+                Some(tdp) => Some(crate::performance::apu::dbus::spawn(tdp)),
+                None => None
+            },
+        }
+    }
+
+    pub fn name(&self) -> String {
+        match &self {
+            Self::AMD(gpu_obj) => gpu_obj.name.clone(),
+            Self::Intel(gpu_obj) => gpu_obj.name.clone(),
+        }
+    }
+}
+
 /// Represents the data contained in /sys/class/drm/cardX
-pub trait DBusInterfaceForGPU {
+pub trait GPUDBusInterfaceGPU {
     fn name(&self) -> String;
     fn path(&self) -> String;
     fn class(&self) -> String;
