@@ -23,7 +23,7 @@ pub struct ASUS {
 impl ASUS {
 
     /// test if we are in an asus system with asus-wmi loaded
-    pub fn new() -> Option<Self> {
+    pub async fn new() -> Option<Self> {
         match RogPlatform::new() {
             Ok(platform) => {
                 log::info!("Module asus-wmi WAS found");

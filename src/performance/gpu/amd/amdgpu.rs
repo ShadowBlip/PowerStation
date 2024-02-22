@@ -7,7 +7,7 @@ use std::{
 use tokio::sync::Mutex;
 
 use crate::constants::GPU_PATH;
-use crate::performance::gpu::interface::GPUIface;
+use crate::performance::gpu::interface::GPUDevice;
 use crate::performance::gpu::amd;
 use crate::performance::gpu::dbus::devices::TDPDevices;
 use crate::performance::gpu::interface::{GPUError, GPUResult};
@@ -30,14 +30,14 @@ pub struct AMDGPU {
 }
 
 
-impl GPUIface for AMDGPU {
+impl GPUDevice for AMDGPU {
 
-    fn get_gpu_path(&self) -> String {
-        format!("{0}/{1}", GPU_PATH, self.name())
+    async fn get_gpu_path(&self) -> String {
+        format!("{0}/{1}", GPU_PATH, self.name().await)
     }
 
     /// Returns the TDP DBus interface for this GPU
-    fn get_tdp_interface(&self) -> Option<Arc<Mutex<TDPDevices>>> {
+    async fn get_tdp_interface(&self) -> Option<Arc<Mutex<TDPDevices>>> {
         // if asusd is present, or asus-wmi is present this is where it is bound to the GPU
         match self.class.as_str() {
             "integrated" => Some(
@@ -56,85 +56,85 @@ impl GPUIface for AMDGPU {
         }
     }
     
-    fn name(&self) -> String {
+    async fn name(&self) -> String {
         self.name.clone()
     }
 
-    fn path(&self) -> String {
+    async fn path(&self) -> String {
         self.path.clone()
     }
 
-    fn class(&self) -> String {
+    async fn class(&self) -> String {
         self.class.clone()
     }
 
-    fn class_id(&self) -> String {
+    async fn class_id(&self) -> String {
         self.class_id.clone()
     }
 
-    fn vendor(&self) -> String {
+    async fn vendor(&self) -> String {
         self.vendor.clone()
     }
 
-    fn vendor_id(&self) -> String {
+    async fn vendor_id(&self) -> String {
         self.vendor_id.clone()
     }
 
-    fn device(&self) -> String {
+    async fn device(&self) -> String {
         self.device.clone()
     }
 
-    fn device_id(&self) -> String {
+    async fn device_id(&self) -> String {
         self.device_id.clone()
     }
 
-    fn subdevice(&self) -> String {
+    async fn subdevice(&self) -> String {
         self.subdevice.clone()
     }
 
-    fn subdevice_id(&self) -> String {
+    async fn subdevice_id(&self) -> String {
         self.subdevice_id.clone()
     }
 
-    fn subvendor_id(&self) -> String {
+    async fn subvendor_id(&self) -> String {
         self.subvendor_id.clone()
     }
 
-    fn revision_id(&self) -> String {
+    async fn revision_id(&self) -> String {
         self.revision_id.clone()
     }
 
-    fn clock_limit_mhz_min(&self) -> GPUResult<f64> {
-        let limits = get_clock_limits(self.path())
+    async fn clock_limit_mhz_min(&self) -> GPUResult<f64> {
+        let limits = get_clock_limits(self.path().await)
             .map_err(|err| GPUError::IOError(err.to_string()))?;
 
         let (min, _) = limits;
         Ok(min)
     }
 
-    fn clock_limit_mhz_max(&self) -> GPUResult<f64> {
-        let limits = get_clock_limits(self.path())
+    async fn clock_limit_mhz_max(&self) -> GPUResult<f64> {
+        let limits = get_clock_limits(self.path().await)
             .map_err(|err| GPUError::IOError(err.to_string()))?;
 
         let (_, max) = limits;
         Ok(max)
     }
 
-    fn clock_value_mhz_min(&self) -> GPUResult<f64> {
-        let values = get_clock_values(self.path())
+    async fn clock_value_mhz_min(&self) -> GPUResult<f64> {
+        let values = get_clock_values(self.path().await)
             .map_err(|err| GPUError::IOError(err.to_string()))?;
 
         let (min, _) = values;
         Ok(min)
     }
 
-    fn set_clock_value_mhz_min(&mut self, value: f64) -> GPUResult<()> {
+    async fn set_clock_value_mhz_min(&mut self, value: f64) -> GPUResult<()> {
         // Build the clock command to send
         // https://www.kernel.org/doc/html/v5.9/gpu/amdgpu.html#pp-od-clk-voltage
         let command = format!("s 0 {}\n", value);
 
         // Open the sysfs file to write to
-        let path = format!("{0}/{1}", self.path(), "device/pp_od_clk_voltage");
+        let path = format!("{0}/{1}", self.path().await, "device/pp_od_clk_voltage");
         let file = OpenOptions::new().write(true).open(path.clone());
 
         // Write the value
@@ -159,21 +159,21 @@ impl GPUIface for AMDGPU {
         )
     }
 
-    fn clock_value_mhz_max(&self) -> GPUResult<f64> {
-        let values = get_clock_values(self.path())
+    async fn clock_value_mhz_max(&self) -> GPUResult<f64> {
+        let values = get_clock_values(self.path().await)
             .map_err(|err| GPUError::IOError(err.to_string()))?;
 
         let (_, max) = values;
         Ok(max)
     }
 
-    fn set_clock_value_mhz_max(&mut self, value: f64) -> GPUResult<()> {
+    async fn set_clock_value_mhz_max(&mut self, value: f64) -> GPUResult<()> {
         // Build the clock command to send
         // https://www.kernel.org/doc/html/v5.9/gpu/amdgpu.html#pp-od-clk-voltage
         let command = format!("s 1 {}\n", value);
 
         // Open the sysfs file to write to
-        let path = format!("{0}/{1}", self.path(), "device/pp_od_clk_voltage");
+        let path = format!("{0}/{1}", self.path().await, "device/pp_od_clk_voltage");
         let file = OpenOptions::new().write(true).open(path.clone());
 
         // Write the value
@@ -191,10 +191,10 @@ impl GPUIface for AMDGPU {
         )
     }
 
-    fn manual_clock(&self) -> GPUResult<bool> {
+    async fn manual_clock(&self) -> GPUResult<bool> {
         let path = format!(
             "{0}/{1}",
-            self.path(),
+            self.path().await,
             "device/power_dpm_force_performance_level"
         );
 
@@ -207,13 +207,13 @@ impl GPUIface for AMDGPU {
         Ok(status == "manual")
     }
 
-    fn set_manual_clock(&mut self, enabled: bool) -> GPUResult<()> {
+    async fn set_manual_clock(&mut self, enabled: bool) -> GPUResult<()> {
         let status = if enabled { "manual" } else { "auto" };
 
         // Open the sysfs file to write to
         let path = format!(
             "{0}/{1}",
-            self.path(),
+            self.path().await,
             "device/power_dpm_force_performance_level"
         );
 
