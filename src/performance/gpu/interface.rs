@@ -1,5 +1,8 @@
-use std::sync::{Arc, Mutex};
-use crate::performance::gpu::tdp::TDPDevice;
+use std::sync::Arc;
+
+use tokio::sync::Mutex;
+
+use crate::performance::gpu::dbus::devices::TDPDevices;
 
 pub enum GPUError {
     //FeatureUnsupported,
@@ -19,7 +22,7 @@ pub type GPUResult<T> = Result<T, GPUError>;
 /// Represents the data contained in /sys/class/drm/cardX
 pub trait GPUIface: Send + Sync {
 
-    fn get_tdp_interface(&self) -> Option<Arc<Mutex<dyn TDPDevice>>>;
+    fn get_tdp_interface(&self) -> Option<Arc<Mutex<TDPDevices>>>;
 
     fn get_gpu_path(&self) -> String;
 

@@ -1,15 +1,16 @@
 use std::{
     fs::{self, OpenOptions},
     io::Write,
-    sync::{
-        Arc, Mutex
-    }
+    sync::Arc
 };
+
+use tokio::sync::Mutex;
 
 use crate::constants::PREFIX;
 use crate::performance::gpu::interface::GPUIface;
-use crate::performance::gpu::{intel, tdp::TDPDevice};
+use crate::performance::gpu::intel;
 use crate::performance::gpu::interface::{GPUError, GPUResult};
+use crate::performance::gpu::dbus::devices::TDPDevices;
 
 #[derive(Debug, Clone)]
 pub struct IntelGPU {
@@ -37,13 +38,15 @@ impl GPUIface for IntelGPU {
     }
 
     /// Returns the TDP DBus interface for this GPU
-    fn get_tdp_interface(&self) -> Option<Arc<Mutex<dyn TDPDevice>>> {
+    fn get_tdp_interface(&self) -> Option<Arc<Mutex<TDPDevices>>> {
         match self.class.as_str() {
             "integrated" => Some(
                 Arc::new(
                     Mutex::new(
-                        intel::tdp::TDP::new(
-                            self.path.clone()
+                        TDPDevices::INTEL(
+                            intel::tdp::TDP::new(
+                                self.path.clone()
+                            )
                         )
                     )
                 )

@@ -33,23 +33,27 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Discover all GPUs and Generate GPU objects to serve
     let mut gpu_obj_paths: Vec<String> = Vec::new();
-    for mut card in get_gpus() {
+    for mut card in get_gpus().await {
         // Build the DBus object path for this card
-        let card_name = card.name().as_str().title();
-        let gpu_path = card.gpu_path();
+        let gpu_name = card.name().await;
+        let card_name = gpu_name.as_str().title();
+        let gpu_path = card.gpu_path().await;
         gpu_obj_paths.push(gpu_path.clone());
 
         // Get the TDP interface from the card and serve it on DBus
-        let tdp = card.get_tdp_interface();
-        if tdp.is_some() {
-            log::debug!("Discovered TDP interface on card: {}", card_name);
-            let tdp = tdp.unwrap();
-            connection.object_server().at(gpu_path.clone(), tdp).await?;
+        match card.get_tdp_interface().await {
+            Some(tdp) => {
+                log::debug!("Discovered TDP interface on card: {}", card_name);
+                connection.object_server().at(gpu_path.clone(), tdp).await?;
+            },
+            None => {
+                log::warn!("Card {} does not have a TDP interface", card_name);
+            }
         }
 
         // Get GPU connectors from the card and serve them on DBus
         let mut connector_paths: Vec<String> = Vec::new();
-        let connectors = get_connectors(card.name());
+        let connectors = get_connectors(gpu_name);
         for connector in connectors {
             let name = connector.name.clone().replace('-', "/");
             let port_path = format!("{0}/{1}", gpu_path, name);
@@ -57,7 +61,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             log::debug!("Discovered connector on {}: {}", card_name, port_path);
             connection.object_server().at(port_path, connector).await?;
         }
-        card.set_connector_paths(connector_paths);
+        card.set_connector_paths(connector_paths).await;
 
         // Serve the GPU interface on DBus
         connection
