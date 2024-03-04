@@ -2,9 +2,12 @@ use simple_logger::SimpleLogger;
 use std::{error::Error, future::pending};
 use zbus::Connection;
 
-use crate::constants::{BUS_NAME, CPU_PATH, GPU_PATH, PREFIX};
+use crate::constants::{BUS_NAME, CPU_PATH, GPU_PATH};
 use crate::performance::cpu::cpu;
-use crate::performance::gpu;
+use crate::performance::gpu::dbus;
+use crate::dbus::gpu::GPUBus;
+use crate::dbus::gpu::get_connectors;
+use crate::dbus::gpu::get_gpus;
 
 mod constants;
 mod performance;
@@ -18,9 +21,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let cpu = cpu::CPU::new();
     let cores = cpu::get_cores();
 
-    // Discover all GPUs
-    let gpus = gpu::get_gpus();
-
     // Configure the connection
     let connection = Connection::system().await?;
 
@@ -31,80 +31,43 @@ async fn main() -> Result<(), Box<dyn Error>> {
         connection.object_server().at(core_path, core).await?;
     }
 
-    // Generate GPU objects to serve
+    // Discover all GPUs and Generate GPU objects to serve
     let mut gpu_obj_paths: Vec<String> = Vec::new();
-    // TODO: There must be a better way to do this
-    for gpu in gpus {
-        match gpu {
-            gpu::GPU::AMD(mut card) => {
-                // Build the DBus object path for this card
-                let card_name = card.name.clone().as_str().title();
-                let gpu_path = format!("{0}/{1}", GPU_PATH, card_name);
-                gpu_obj_paths.push(gpu_path.clone());
+    for mut card in get_gpus() {
+        // Build the DBus object path for this card
+        let card_name = card.name().as_str().title();
+        let gpu_path = card.gpu_path();
+        gpu_obj_paths.push(gpu_path.clone());
 
-                // Get the TDP interface from the card and serve it on DBus
-                let tdp = card.get_tdp_interface();
-                if tdp.is_some() {
-                    log::debug!("Discovered TDP interface on card: {}", card_name);
-                    let tdp = tdp.unwrap();
-                    connection.object_server().at(gpu_path.clone(), tdp).await?;
-                }
+        // Get the TDP interface from the card and serve it on DBus
+        let tdp = card.get_tdp_interface();
+        if tdp.is_some() {
+            log::debug!("Discovered TDP interface on card: {}", card_name);
+            let tdp = tdp.unwrap();
+            connection.object_server().at(gpu_path.clone(), tdp).await?;
+        }
 
-                // Get GPU connectors from the card and serve them on DBus
-                let mut connector_paths: Vec<String> = Vec::new();
-                let connectors = gpu::get_connectors(card.name.clone());
-                for connector in connectors {
-                    let name = connector.name.clone().replace('-', "/");
-                    let port_path = format!("{0}/{1}", gpu_path, name);
-                    connector_paths.push(port_path.clone());
-                    log::debug!("Discovered connector on {}: {}", card_name, port_path);
-                    connection.object_server().at(port_path, connector).await?;
-                }
-                card.connector_paths = connector_paths;
+        // Get GPU connectors from the card and serve them on DBus
+        let mut connector_paths: Vec<String> = Vec::new();
+        let connectors = get_connectors(card.name());
+        for connector in connectors {
+            let name = connector.name.clone().replace('-', "/");
+            let port_path = format!("{0}/{1}", gpu_path, name);
+            connector_paths.push(port_path.clone());
+            log::debug!("Discovered connector on {}: {}", card_name, port_path);
+            connection.object_server().at(port_path, connector).await?;
+        }
+        card.set_connector_paths(connector_paths);
 
-                // Serve the GPU interface on DBus
-                connection
-                    .object_server()
-                    .at(gpu_path.clone(), card)
-                    .await?;
-            }
-
-            gpu::GPU::Intel(mut card) => {
-                // Build the DBus object path for this card
-                let card_name = card.name.clone().as_str().title();
-                let gpu_path = format!("{0}/GPU/{1}", PREFIX, card_name);
-                gpu_obj_paths.push(gpu_path.clone());
-
-                // Get the TDP interface from the card and serve it on DBus
-                let tdp = card.get_tdp_interface();
-                if tdp.is_some() {
-                    log::debug!("Discovered TDP interface on card: {}", card_name);
-                    let tdp = tdp.unwrap();
-                    connection.object_server().at(gpu_path.clone(), tdp).await?;
-                }
-
-                // Get GPU connectors from the card and serve them on DBus
-                let mut connector_paths: Vec<String> = Vec::new();
-                let connectors = gpu::get_connectors(card.name.clone());
-                for connector in connectors {
-                    let name = connector.name.clone().replace('-', "/");
-                    let port_path = format!("{0}/{1}", gpu_path, name);
-                    connector_paths.push(port_path.clone());
-                    connection.object_server().at(port_path, connector).await?;
-                }
-                card.connector_paths = connector_paths;
-
-                // Serve the GPU interface on DBus
-                connection
-                    .object_server()
-                    .at(gpu_path.clone(), card)
-                    .await?;
-            }
-        };
+        // Serve the GPU interface on DBus
+        connection
+            .object_server()
+            .at(gpu_path.clone(), card)
+            .await?;
     }
 
     // Create a GPU Bus instance which allows card enumeration
-    let gpu_bus = gpu::GPUBus::new(gpu_obj_paths);
+    let gpu_bus = GPUBus::new(gpu_obj_paths);
     connection.object_server().at(GPU_PATH, gpu_bus).await?;
 
     // Request a name
