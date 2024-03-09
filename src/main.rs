@@ -12,7 +12,7 @@ use crate::dbus::gpu::get_gpus;
 mod constants;
 mod performance;
 
-#[tokio::main]
+#[tokio::main(flavor = "multi_thread", worker_threads = 2)]
 async fn main() -> Result<(), Box<dyn Error>> {
     SimpleLogger::new().init().unwrap();
     log::info!("Starting PowerStation");
