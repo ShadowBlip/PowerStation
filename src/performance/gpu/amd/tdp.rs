@@ -4,6 +4,7 @@ use crate::performance::gpu::tdp::{TDPDevice, TDPError, TDPResult};
 
 /// Steam Deck GPU ID
 const DEV_ID_VANGOGH: &str = "163f";
+const DEV_ID_SEPHIROTH: &str = "1435";
 
 /// Implementation of TDP control for AMD GPUs
 pub struct TDP {
@@ -27,14 +28,17 @@ impl TDP {
         // Set fake TDP limits for GPUs that don't support ryzenadj monitoring (e.g. Steam Deck)
         let unsupported_stapm_limit: f32 = match device_id.as_str() {
             DEV_ID_VANGOGH => 12.0,
+            DEV_ID_SEPHIROTH => 12.0,
             _ => 10.0,
         };
         let unsupported_ppt_limit_fast: f32 = match device_id.as_str() {
             DEV_ID_VANGOGH => 15.0,
+            DEV_ID_SEPHIROTH => 15.0,
             _ => 10.0,
         };
         let unsupported_thm_limit: f32 = match device_id.as_str() {
             DEV_ID_VANGOGH => 95.0,
+            DEV_ID_SEPHIROTH => 95.0,
             _ => 95.0,
         };
 
@@ -50,7 +54,7 @@ impl TDP {
 
     /// Returns true if ryzenadj cannot read values from the given GPU
     fn is_unsupported_gpu(&self) -> bool {
-        self.device_id == DEV_ID_VANGOGH
+        matches!(self.device_id.as_str(), DEV_ID_VANGOGH | DEV_ID_SEPHIROTH)
     }
 
     /// Set the current Slow PPT limit using ryzenadj
@@ -221,12 +225,11 @@ impl TDP {
 }
 
 impl TDPDevice for TDP {
-
     fn tdp(&self) -> TDPResult<f64> {
         // Get the current stapm limit from ryzenadj
         match TDP::get_stapm_limit(&self) {
             Ok(result) => Ok(result.into()),
-            Err(err) => Err(TDPError::FailedOperation(err.to_string()))
+            Err(err) => Err(TDPError::FailedOperation(err.to_string())),
         }
     }
 
@@ -234,16 +237,19 @@ impl TDPDevice for TDP {
         log::debug!("Setting TDP to: {}", value);
         if value < 1.0 {
             log::warn!("Cowardly refusing to set TDP less than 1W");
-            return Err(TDPError::InvalidArgument(format!("Cowardly refusing to set TDP less than 1W: provided {}W", value)));
+            return Err(TDPError::InvalidArgument(format!(
+                "Cowardly refusing to set TDP less than 1W: provided {}W",
+                value
+            )));
         }
-
 
         // Get the current boost value before updating the STAPM limit. We will
         // use this value to also adjust the Fast PPT Limit.
         let fast_ppt_limit =
             TDP::get_ppt_limit_fast(&self).map_err(|err| TDPError::FailedOperation(err))?;
         let mut fast_ppt_limit = fast_ppt_limit as f64;
-        let stapm_limit = TDP::get_stapm_limit(&self).map_err(|err| TDPError::FailedOperation(err))?;
+        let stapm_limit =
+            TDP::get_stapm_limit(&self).map_err(|err| TDPError::FailedOperation(err))?;
         let stapm_limit = stapm_limit as f64;
 
         // TODO: Is this a bug in ryzenadj? Sometimes fast_ppt_limit is ~0
@@ -265,17 +271,18 @@ impl TDPDevice for TDP {
         // After successfully setting the STAPM limit, we also need to adjust the
         // Fast PPT Limit accordingly so it is *boost* distance away.
         let fast_ppt_limit = ((value + boost) * 1000.0) as u32;
-        TDP::set_ppt_limit_fast(self, fast_ppt_limit).map_err(|err| TDPError::FailedOperation(err))?;
+        TDP::set_ppt_limit_fast(self, fast_ppt_limit)
+            .map_err(|err| TDPError::FailedOperation(err))?;
 
         Ok(())
     }
 
     fn boost(&self) -> TDPResult<f64> {
-        let fast_ppt_limit =
-            TDP::get_ppt_limit_fast(&self).map_err(|err| TDPError::FailedOperation(String::from(err)))?;
+        let fast_ppt_limit = TDP::get_ppt_limit_fast(&self)
+            .map_err(|err| TDPError::FailedOperation(String::from(err)))?;
         let fast_ppt_limit = fast_ppt_limit as f64;
-        let stapm_limit =
-            TDP::get_stapm_limit(&self).map_err(|err| TDPError::FailedOperation(String::from(err)))?;
+        let stapm_limit = TDP::get_stapm_limit(&self)
+            .map_err(|err| TDPError::FailedOperation(String::from(err)))?;
         let stapm_limit = stapm_limit as f64;
 
         let boost = fast_ppt_limit - stapm_limit;
@@ -287,22 +294,28 @@ impl TDPDevice for TDP {
         log::debug!("Setting boost to: {}", value);
         if value < 0.0 {
             log::warn!("Cowardly refusing to set TDP Boost less than 0W");
-            return Err(TDPError::InvalidArgument(format!("Cowardly refusing to set TDP Boost less than 0W: {}W provided", value)));
+            return Err(TDPError::InvalidArgument(format!(
+                "Cowardly refusing to set TDP Boost less than 0W: {}W provided",
+                value
+            )));
         }
 
         // Get the STAPM Limit so we can calculate what Fast PPT Limit to set.
-        let stapm_limit = TDP::get_stapm_limit(&self).map_err(|err| TDPError::FailedOperation(err))?;
+        let stapm_limit =
+            TDP::get_stapm_limit(&self).map_err(|err| TDPError::FailedOperation(err))?;
         let stapm_limit = stapm_limit as f64;
 
         // Set the new fast ppt limit
         let fast_ppt_limit = ((stapm_limit + value) * 1000.0) as u32;
-        TDP::set_ppt_limit_fast(self, fast_ppt_limit).map_err(|err| TDPError::FailedOperation(err))?;
+        TDP::set_ppt_limit_fast(self, fast_ppt_limit)
+            .map_err(|err| TDPError::FailedOperation(err))?;
 
         Ok(())
     }
 
     fn thermal_throttle_limit_c(&self) -> TDPResult<f64> {
-        let limit = TDP::get_thm_limit(&self).map_err(|err| TDPError::FailedOperation(err.to_string()))?;
+        let limit =
+            TDP::get_thm_limit(&self).map_err(|err| TDPError::FailedOperation(err.to_string()))?;
         Ok(limit.into())
     }
 
