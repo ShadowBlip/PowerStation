@@ -3,11 +3,11 @@ use std::{error::Error, future::pending};
 use zbus::Connection;
 
 use crate::constants::{BUS_NAME, CPU_PATH, GPU_PATH};
-use crate::performance::cpu::cpu;
-use crate::performance::gpu::dbus;
-use crate::dbus::gpu::GPUBus;
 use crate::dbus::gpu::get_connectors;
 use crate::dbus::gpu::get_gpus;
+use crate::dbus::gpu::GPUBus;
+use crate::performance::cpu::cpu;
+use crate::performance::gpu::dbus;
 
 mod constants;
 mod performance;
@@ -15,7 +15,8 @@ mod performance;
 #[tokio::main(flavor = "multi_thread", worker_threads = 2)]
 async fn main() -> Result<(), Box<dyn Error>> {
     SimpleLogger::new().init().unwrap();
-    log::info!("Starting PowerStation");
+    const VERSION: &str = env!("CARGO_PKG_VERSION");
+    log::info!("Starting PowerStation v{}", VERSION);
 
     // Discover all CPUs
     let cpu = cpu::CPU::new();
