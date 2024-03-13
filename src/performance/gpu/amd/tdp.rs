@@ -4,6 +4,7 @@ use crate::performance::gpu::tdp::{TDPDevice, TDPError, TDPResult};
 
 /// Steam Deck GPU ID
 const DEV_ID_VANGOGH: &str = "163f";
+const DEV_ID_SEPHIROTH: &str = "1435";
 
 /// Implementation of TDP control for AMD GPUs
 pub struct TDP {
@@ -27,14 +28,17 @@ impl TDP {
         // Set fake TDP limits for GPUs that don't support ryzenadj monitoring (e.g. Steam Deck)
         let unsupported_stapm_limit: f32 = match device_id.as_str() {
             DEV_ID_VANGOGH => 12.0,
+            DEV_ID_SEPHIROTH => 12.0,
             _ => 10.0,
         };
         let unsupported_ppt_limit_fast: f32 = match device_id.as_str() {
             DEV_ID_VANGOGH => 15.0,
+            DEV_ID_SEPHIROTH => 15.0,
             _ => 10.0,
         };
         let unsupported_thm_limit: f32 = match device_id.as_str() {
             DEV_ID_VANGOGH => 95.0,
+            DEV_ID_SEPHIROTH => 95.0,
             _ => 95.0,
         };
 
@@ -50,7 +54,7 @@ impl TDP {
 
     /// Returns true if ryzenadj cannot read values from the given GPU
     fn is_unsupported_gpu(&self) -> bool {
-        self.device_id == DEV_ID_VANGOGH
+        matches!(self.device_id.as_str(), DEV_ID_VANGOGH | DEV_ID_SEPHIROTH)
     }
 
     /// Set the current Slow PPT limit using ryzenadj
