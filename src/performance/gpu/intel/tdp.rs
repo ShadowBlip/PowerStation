@@ -15,8 +15,7 @@ impl TDP {
 }
 
 impl TDPDevice for TDP {
-
-    fn tdp(&self) -> TDPResult<f64> {
+    async fn tdp(&self) -> TDPResult<f64> {
         let path = "/sys/class/powercap/intel-rapl/intel-rapl:0/constraint_0_power_limit_uw";
         let result = fs::read_to_string(path);
         let content = result.map_err(|err| TDPError::IOError(err.to_string()))?;
@@ -33,7 +32,7 @@ impl TDPDevice for TDP {
         Ok(long_tdp / 1000000.0)
     }
 
-    fn set_tdp(&mut self, value: f64) -> TDPResult<()> {
+    async fn set_tdp(&mut self, value: f64) -> TDPResult<()> {
         if value < 1.0 {
             let err = "Cowardly refusing to set TDP less than 1";
             log::warn!("{}", err);
@@ -42,7 +41,7 @@ impl TDPDevice for TDP {
 
         // Get the current boost value so the peak tdp can be set *boost*
         // distance away.
-        let boost = self.boost()?;
+        let boost = self.boost().await?;
 
         // Open the sysfs file to write to
         let path = "/sys/class/powercap/intel-rapl/intel-rapl:0/constraint_0_power_limit_uw";
@@ -58,10 +57,10 @@ impl TDPDevice for TDP {
             .map_err(|err| TDPError::IOError(err.to_string()))?;
 
         // Update the boost value
-        Ok(self.set_boost(boost)?)
+        Ok(self.set_boost(boost).await?)
     }
 
-    fn boost(&self) -> TDPResult<f64> {
+    async fn boost(&self) -> TDPResult<f64> {
         let path = "/sys/class/powercap/intel-rapl/intel-rapl:0/constraint_2_power_limit_uw";
         let result = fs::read_to_string(path);
         let content = result
@@ -76,18 +75,18 @@ impl TDPDevice for TDP {
             }
         };
 
-        let tdp = self.tdp()?;
+        let tdp = self.tdp().await?;
         Ok((peak_tdp / 1000000.0) - tdp)
     }
 
-    fn set_boost(&mut self, value: f64) -> TDPResult<()> {
+    async fn set_boost(&mut self, value: f64) -> TDPResult<()> {
         if value < 0.0 {
             let err = "Cowardly refusing to set TDP Boost less than 0";
             log::warn!("{}", err);
             return Err(TDPError::InvalidArgument(String::from(err)));
         }
 
-        let tdp = self.tdp()?;
+        let tdp = self.tdp().await?;
         let boost = value.clone();
         let short_tdp = if boost > 0.0 {
             ((boost / 2.0) + tdp) * 1000000.0
@@ -114,22 +113,22 @@ impl TDPDevice for TDP {
             .map_err(|err| TDPError::IOError(err.to_string()))
     }
 
-    fn thermal_throttle_limit_c(&self) -> TDPResult<f64> {
+    async fn thermal_throttle_limit_c(&self) -> TDPResult<f64> {
         log::error!("Thermal throttling not supported on intel gpu");
         Err(TDPError::FeatureUnsupported)
     }
 
-    fn set_thermal_throttle_limit_c(&mut self, _limit: f64) -> TDPResult<()> {
+    async fn set_thermal_throttle_limit_c(&mut self, _limit: f64) -> TDPResult<()> {
         log::error!("Thermal throttling not supported on intel gpu");
         Err(TDPError::FeatureUnsupported)
     }
 
-    fn power_profile(&self) -> TDPResult<String> {
+    async fn power_profile(&self) -> TDPResult<String> {
         log::error!("Power profiles not supported on intel gpu");
         Err(TDPError::FeatureUnsupported)
     }
 
-    fn set_power_profile(&mut self, _profile: String) -> TDPResult<()> {
+    async fn set_power_profile(&mut self, _profile: String) -> TDPResult<()> {
         log::error!("Power profiles not supported on intel gpu");
         Err(TDPError::FeatureUnsupported)
     }

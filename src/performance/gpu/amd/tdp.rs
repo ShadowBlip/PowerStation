@@ -221,8 +221,7 @@ impl TDP {
 }
 
 impl TDPDevice for TDP {
-
-    fn tdp(&self) -> TDPResult<f64> {
+    async fn tdp(&self) -> TDPResult<f64> {
         // Get the current stapm limit from ryzenadj
         match TDP::get_stapm_limit(&self) {
             Ok(result) => Ok(result.into()),
@@ -230,13 +229,12 @@ impl TDPDevice for TDP {
         }
     }
 
-    fn set_tdp(&mut self, value: f64) -> TDPResult<()> {
+    async fn set_tdp(&mut self, value: f64) -> TDPResult<()> {
         log::debug!("Setting TDP to: {}", value);
         if value < 1.0 {
             log::warn!("Cowardly refusing to set TDP less than 1W");
             return Err(TDPError::InvalidArgument(format!("Cowardly refusing to set TDP less than 1W: provided {}W", value)));
         }
-
 
         // Get the current boost value before updating the STAPM limit. We will
         // use this value to also adjust the Fast PPT Limit.
@@ -270,7 +268,7 @@ impl TDPDevice for TDP {
         Ok(())
     }
 
-    fn boost(&self) -> TDPResult<f64> {
+    async fn boost(&self) -> TDPResult<f64> {
         let fast_ppt_limit =
             TDP::get_ppt_limit_fast(&self).map_err(|err| TDPError::FailedOperation(String::from(err)))?;
         let fast_ppt_limit = fast_ppt_limit as f64;
@@ -283,7 +281,7 @@ impl TDPDevice for TDP {
         Ok(boost)
     }
 
-    fn set_boost(&mut self, value: f64) -> TDPResult<()> {
+    async fn set_boost(&mut self, value: f64) -> TDPResult<()> {
         log::debug!("Setting boost to: {}", value);
         if value < 0.0 {
             log::warn!("Cowardly refusing to set TDP Boost less than 0W");
@@ -301,22 +299,22 @@ impl TDPDevice for TDP {
         Ok(())
     }
 
-    fn thermal_throttle_limit_c(&self) -> TDPResult<f64> {
+    async fn thermal_throttle_limit_c(&self) -> TDPResult<f64> {
         let limit = TDP::get_thm_limit(&self).map_err(|err| TDPError::FailedOperation(err.to_string()))?;
         Ok(limit.into())
     }
 
-    fn set_thermal_throttle_limit_c(&mut self, limit: f64) -> TDPResult<()> {
+    async fn set_thermal_throttle_limit_c(&mut self, limit: f64) -> TDPResult<()> {
         log::debug!("Setting thermal throttle limit to: {}", limit);
         let limit = limit as u32;
         TDP::set_thm_limit(self, limit).map_err(|err| TDPError::FailedOperation(err.to_string()))
     }
 
-    fn power_profile(&self) -> TDPResult<String> {
+    async fn power_profile(&self) -> TDPResult<String> {
         Ok(self.profile.clone())
     }
 
-    fn set_power_profile(&mut self, profile: String) -> TDPResult<()> {
+    async fn set_power_profile(&mut self, profile: String) -> TDPResult<()> {
         log::debug!("Setting power profile to: {}", profile);
         TDP::set_power_profile(&self, profile.clone())
             .map_err(|err| TDPError::FailedOperation(err.to_string()))?;

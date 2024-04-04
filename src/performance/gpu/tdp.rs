@@ -14,14 +14,12 @@ impl Into<String> for TDPError {
 pub type TDPResult<T> = Result<T, TDPError>;
 
 pub trait TDPDevice : Sync + Send {
-
-    fn tdp(&self) -> TDPResult<f64>;
-    fn set_tdp(&mut self, value: f64) -> TDPResult<()>;
-    fn boost(&self) -> TDPResult<f64>;
-    fn set_boost(&mut self, value: f64) -> TDPResult<()>;
-    fn thermal_throttle_limit_c(&self) -> TDPResult<f64>;
-    fn set_thermal_throttle_limit_c(&mut self, limit: f64) -> TDPResult<()>;
-    fn power_profile(&self) -> TDPResult<String>;
-    fn set_power_profile(&mut self, profile: String) -> TDPResult<()>;
-
+    async fn tdp(&self) -> TDPResult<f64>;
+    async fn set_tdp(&mut self, value: f64) -> TDPResult<()>;
+    async fn boost(&self) -> TDPResult<f64>;
+    async fn set_boost(&mut self, value: f64) -> TDPResult<()>;
+    async fn thermal_throttle_limit_c(&self) -> TDPResult<f64>;
+    async fn set_thermal_throttle_limit_c(&mut self, limit: f64) -> TDPResult<()>;
+    async fn power_profile(&self) -> TDPResult<String>;
+    async fn set_power_profile(&mut self, profile: String) -> TDPResult<()>;
 }
