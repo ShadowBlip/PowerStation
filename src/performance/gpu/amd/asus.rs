@@ -1,13 +1,11 @@
 use std::sync::Arc;
-use udev::{Enumerator, Device};
 
 use crate::performance::gpu::tdp::{TDPDevice, TDPResult, TDPError};
 use crate::performance::gpu::dbus::devices::TDPDevices;
 
 use zbus::{Connection, Result};
 
-use rog_dbus::RogDbusClientBlocking;
-use rog_dbus::DbusProxies;
+use rog_dbus::{DbusProxies, RogDbusClient};
 use rog_platform::{platform::RogPlatform, error::PlatformError};
 use rog_platform::platform::{GpuMode, Properties, ThrottlePolicy};
 use rog_profiles::error::ProfileError;
@@ -42,12 +40,11 @@ impl ASUS {
 
 impl TDPDevice for ASUS {
     async fn tdp(&self) -> TDPResult<f64> {
-        match RogDbusClientBlocking::new() {
+        match RogDbusClient::new().await {
             Ok((dbus, _)) => {
-                let supported_properties = dbus.proxies().platform().supported_properties().unwrap();
-                let supported_interfaces = dbus.proxies().platform().supported_interfaces().unwrap();
+                let platform = dbus.proxies().rog_bios();
 
-                match dbus.proxies().platform().ppt_apu_sppt() {
+                match platform.ppt_apu_sppt().await {
                     Ok(result) => {
                         log::info!("Initial ppt_apu_sppt: {}", result);
                         Ok(result as f64)
@@ -66,30 +63,56 @@ impl TDPDevice for ASUS {
     }
 
     async fn set_tdp(&mut self, value: f64) -> TDPResult<()> {
-        todo!()
+        match RogDbusClient::new().await {
+            Ok((dbus, _)) => {
+                let platform = dbus.proxies().rog_bios();
+
+                match platform.set_ppt_apu_sppt(value.round() as u8).await {
+                    Ok(()) => Ok(()),
+                    Err(err) => {
+                        log::warn!("Unable to use asusd to read tdp, asus-wmi interface will be used");
+                        Err(TDPError::FailedOperation(format!("")))
+                    },
+                }
+            },
+            Err(err) => {
+                log::warn!("Unable to use asusd to read tdp, asus-wmi interface will be used");
+                Err(TDPError::FailedOperation(format!("")))
+            }
+        }
     }
 
     async fn boost(&self) -> TDPResult<f64> {
-        todo!()
+        Ok(5.0)
     }
 
     async fn set_boost(&mut self, value: f64) -> TDPResult<()> {
-        todo!()
+        Ok(())
     }
 
     async fn thermal_throttle_limit_c(&self) -> TDPResult<f64> {
-        todo!()
+        Ok(0.0)
     }
 
     async fn set_thermal_throttle_limit_c(&mut self, limit: f64) -> TDPResult<()> {
-        todo!()
+        Ok(())
     }
 
     async fn power_profile(&self) -> TDPResult<String> {
-        todo!()
+        match RogDbusClient::new().await {
+            Ok((dbus, _)) => {
+                let platform = dbus.proxies().rog_bios();
+
+                Ok("".to_string())
+            },
+            Err(err) => {
+                log::warn!("Unable to use asusd to read tdp, asus-wmi interface will be used");
+                Err(TDPError::FailedOperation(format!("")))
+            }
+        }
     }
 
     async fn set_power_profile(&mut self, profile: String) -> TDPResult<()> {
-        todo!()
+        Ok(())
     }
 }
