@@ -16,6 +16,8 @@ use std::sync::Mutex;
 /// See https://www.kernel.org/doc/html/v6.8-rc4/admin-guide/abi-testing.html#abi-sys-devices-platform-platform-ppt-apu-sppt
 pub struct ASUS {
     platform: Arc<Mutex<RogPlatform>>,
+    tdp: u8,
+    boost: u8,
 }
 
 impl ASUS {
@@ -26,7 +28,9 @@ impl ASUS {
             Ok(platform) => {
                 log::info!("Module asus-wmi WAS found");
                 Some(Self {
-                    platform: Arc::new(Mutex::new(platform))
+                    platform: Arc::new(Mutex::new(platform)),
+                    tdp: 5,
+                    boost: 0
                 })
             },
             Err(err) => {
@@ -44,13 +48,13 @@ impl TDPDevice for ASUS {
             Ok((dbus, _)) => {
                 let platform = dbus.proxies().rog_bios();
 
-                match platform.ppt_apu_sppt().await {
+                match platform.ppt_fppt().await {
                     Ok(result) => {
-                        log::info!("Initial ppt_apu_sppt: {}", result);
-                        Ok(result as f64)
+                        log::info!("Initial ppt_fppt: {}", result);
+                        Ok(self.tdp.into())
                     },
                     Err(err) => {
-                        log::warn!("Error fetching ppt_apu_sppt: {}", err);
+                        log::warn!("Error fetching ppt_fppt: {}", err);
                         Err(TDPError::FailedOperation(format!("")))
                     }
                 }
@@ -63,31 +67,55 @@ impl TDPDevice for ASUS {
     }
 
     async fn set_tdp(&mut self, value: f64) -> TDPResult<()> {
+        self.tdp = value.round() as u8;
+
         match RogDbusClient::new().await {
             Ok((dbus, _)) => {
                 let platform = dbus.proxies().rog_bios();
 
-                match platform.set_ppt_apu_sppt(value.round() as u8).await {
+                log::info!("{} + {}", self.tdp, self.boost);
+
+                match platform.set_ppt_fppt(self.tdp + self.boost).await {
                     Ok(()) => Ok(()),
                     Err(err) => {
-                        log::warn!("Unable to use asusd to read tdp, asus-wmi interface will be used");
+                        log::warn!("Unable to set ppt_fppt: {}", err);
                         Err(TDPError::FailedOperation(format!("")))
                     },
                 }
             },
             Err(err) => {
-                log::warn!("Unable to use asusd to read tdp, asus-wmi interface will be used");
+                log::warn!("Unable to set ppt_fppt: {}", err);
                 Err(TDPError::FailedOperation(format!("")))
             }
         }
     }
 
     async fn boost(&self) -> TDPResult<f64> {
-        Ok(5.0)
+        Ok(self.boost.into())
     }
 
     async fn set_boost(&mut self, value: f64) -> TDPResult<()> {
-        Ok(())
+        self.boost = value.round() as u8;
+
+        match RogDbusClient::new().await {
+            Ok((dbus, _)) => {
+                let platform = dbus.proxies().rog_bios();
+
+                log::info!("{} + {}", self.tdp, self.boost);
+
+                match platform.set_ppt_fppt(self.tdp + self.boost).await {
+                    Ok(()) => Ok(()),
+                    Err(err) => {
+                        log::warn!("Unable to set ppt_fppt: {}", err);
+                        Err(TDPError::FailedOperation(format!("")))
+                    },
+                }
+            },
+            Err(err) => {
+                log::warn!("Unable to set ppt_fppt: {}", err);
+                Err(TDPError::FailedOperation(format!("")))
+            }
+        }
     }
 
     async fn thermal_throttle_limit_c(&self) -> TDPResult<f64> {
@@ -113,6 +141,18 @@ impl TDPDevice for ASUS {
     }
 
     async fn set_power_profile(&mut self, profile: String) -> TDPResult<()> {
-        Ok(())
+        // possible values - "max-performance", "power-saving"
+
+        match RogDbusClient::new().await {
+            Ok((dbus, _)) => {
+                let platform = dbus.proxies().rog_bios();
+
+                Ok(())
+            },
+            Err(err) => {
+                log::warn!("Unable to use asusd to read tdp, asus-wmi interface will be used");
+                Err(TDPError::FailedOperation(format!("")))
+            }
+        }
     }
 }
