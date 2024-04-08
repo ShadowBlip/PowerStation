@@ -1,17 +1,10 @@
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use crate::performance::gpu::tdp::{TDPDevice, TDPResult, TDPError};
-use crate::performance::gpu::dbus::devices::TDPDevices;
 
-use tokio::task::spawn_blocking;
-use zbus::{Connection, Result};
-
-use rog_dbus::{DbusProxies, RogDbusClient};
-use rog_platform::{platform::RogPlatform, error::PlatformError};
-use rog_platform::platform::{GpuMode, Properties, ThrottlePolicy};
-use rog_profiles::error::ProfileError;
-
-use std::sync::Mutex;
+use rog_dbus::RogDbusClient;
+use rog_platform::platform::RogPlatform;
+use rog_platform::platform::ThrottlePolicy;
 
 /// Implementation of asusd with a fallback to asus-wmi sysfs
 /// See https://www.kernel.org/doc/html/v6.8-rc4/admin-guide/abi-testing.html#abi-sys-devices-platform-platform-ppt-apu-sppt
@@ -93,7 +86,7 @@ impl ASUS {
                     },
                 }
             },
-            Err(err) => {
+            Err(_) => {
                 log::warn!("Unable to use asusd to read tdp, asus-wmi interface will be used");
                 Err(TDPError::FailedOperation(format!("")))
             }
@@ -112,7 +105,7 @@ impl TDPDevice for ASUS {
                         log::info!("ppt_fppt: {}", result);
                         Ok(self.tdp.into())
                     },
-                    Err(err) => {
+                    Err(_) => {
                         match self.platform.lock() {
                             Ok(platform) => {
                                 match platform.get_ppt_fppt() {
@@ -178,7 +171,7 @@ impl TDPDevice for ASUS {
         Ok(0.0)
     }
 
-    async fn set_thermal_throttle_limit_c(&mut self, limit: f64) -> TDPResult<()> {
+    async fn set_thermal_throttle_limit_c(&mut self, _limit: f64) -> TDPResult<()> {
         Ok(())
     }
 
