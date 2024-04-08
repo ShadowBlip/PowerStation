@@ -3,6 +3,7 @@ use std::sync::Arc;
 use crate::performance::gpu::tdp::{TDPDevice, TDPResult, TDPError};
 use crate::performance::gpu::dbus::devices::TDPDevices;
 
+use tokio::task::spawn_blocking;
 use zbus::{Connection, Result};
 
 use rog_dbus::{DbusProxies, RogDbusClient};
@@ -40,6 +41,44 @@ impl ASUS {
         }
     }
 
+    async fn set_tdp_boost(&self) -> TDPResult<()> {
+        match RogDbusClient::new().await {
+            Ok((dbus, _)) => {
+                let platform = dbus.proxies().rog_bios();
+
+                log::info!("{} + {}", self.tdp, self.boost);
+
+                match platform.set_ppt_fppt(self.tdp + self.boost).await {
+                    Ok(()) => Ok(()),
+                    Err(_) => {
+                        self.set_tdp_boost_wmi().await
+                    },
+                }
+            },
+            Err(_) => {
+                log::warn!("Unable to use asusd to read tdp, asus-wmi interface will be used");
+                self.set_tdp_boost_wmi().await
+            }
+        }
+    }
+
+    async fn set_tdp_boost_wmi(&self) -> TDPResult<()> {
+        match self.platform.lock() {
+            Ok(platform) => {
+                match platform.set_ppt_fppt(self.tdp + self.boost) {
+                    Ok(()) => Ok(()),
+                    Err(err) => {
+                        log::warn!("Unable to set ppt_fppt: {}", err);
+                        Err(TDPError::FailedOperation(format!("")))
+                    }
+                }
+            },
+            Err(_) => {
+                log::warn!("Unable to use asus-wmi interface");
+                Err(TDPError::FailedOperation(format!("")))
+            },
+        }
+    }
 }
 
 impl TDPDevice for ASUS {
@@ -50,18 +89,51 @@ impl TDPDevice for ASUS {
 
                 match platform.ppt_fppt().await {
                     Ok(result) => {
-                        log::info!("Initial ppt_fppt: {}", result);
+                        log::info!("ppt_fppt: {}", result);
                         Ok(self.tdp.into())
                     },
                     Err(err) => {
-                        log::warn!("Error fetching ppt_fppt: {}", err);
-                        Err(TDPError::FailedOperation(format!("")))
+                        match self.platform.lock() {
+                            Ok(platform) => {
+                                match platform.get_ppt_fppt() {
+                                    Ok(result) => {
+                                        log::info!("ppt_fppt: {}", result);
+                                        Ok(self.tdp.into())
+                                    },
+                                    Err(err) => {
+                                        log::warn!("Error fetching ppt_fppt: {}", err);
+                                        Err(TDPError::FailedOperation(format!("")))
+                                    }
+                                }
+                            },
+                            Err(_) => {
+                                log::warn!("Unable to use asus-wmi interface");
+                                Err(TDPError::FailedOperation(format!("")))
+                            },
+                        }
                     }
                 }
             },
-            Err(err) => {
+            Err(_) => {
                 log::warn!("Unable to use asusd to read tdp, asus-wmi interface will be used");
-                Err(TDPError::FailedOperation(format!("")))
+                match self.platform.lock() {
+                    Ok(platform) => {
+                        match platform.get_ppt_fppt() {
+                            Ok(result) => {
+                                log::info!("ppt_fppt: {}", result);
+                                Ok(self.tdp.into())
+                            },
+                            Err(err) => {
+                                log::warn!("Error fetching ppt_fppt: {}", err);
+                                Err(TDPError::FailedOperation(format!("")))
+                            }
+                        }
+                    },
+                    Err(_) => {
+                        log::warn!("Unable to use asus-wmi interface");
+                        Err(TDPError::FailedOperation(format!("")))
+                    },
+                }
             }
         }
     }
@@ -69,25 +141,7 @@ impl TDPDevice for ASUS {
     async fn set_tdp(&mut self, value: f64) -> TDPResult<()> {
         self.tdp = value.round() as u8;
 
-        match RogDbusClient::new().await {
-            Ok((dbus, _)) => {
-                let platform = dbus.proxies().rog_bios();
-
-                log::info!("{} + {}", self.tdp, self.boost);
-
-                match platform.set_ppt_fppt(self.tdp + self.boost).await {
-                    Ok(()) => Ok(()),
-                    Err(err) => {
-                        log::warn!("Unable to set ppt_fppt: {}", err);
-                        Err(TDPError::FailedOperation(format!("")))
-                    },
-                }
-            },
-            Err(err) => {
-                log::warn!("Unable to set ppt_fppt: {}", err);
-                Err(TDPError::FailedOperation(format!("")))
-            }
-        }
+        self.set_tdp_boost().await
     }
 
     async fn boost(&self) -> TDPResult<f64> {
@@ -97,25 +151,7 @@ impl TDPDevice for ASUS {
     async fn set_boost(&mut self, value: f64) -> TDPResult<()> {
         self.boost = value.round() as u8;
 
-        match RogDbusClient::new().await {
-            Ok((dbus, _)) => {
-                let platform = dbus.proxies().rog_bios();
-
-                log::info!("{} + {}", self.tdp, self.boost);
-
-                match platform.set_ppt_fppt(self.tdp + self.boost).await {
-                    Ok(()) => Ok(()),
-                    Err(err) => {
-                        log::warn!("Unable to set ppt_fppt: {}", err);
-                        Err(TDPError::FailedOperation(format!("")))
-                    },
-                }
-            },
-            Err(err) => {
-                log::warn!("Unable to set ppt_fppt: {}", err);
-                Err(TDPError::FailedOperation(format!("")))
-            }
-        }
+        self.set_tdp_boost().await
     }
 
     async fn thermal_throttle_limit_c(&self) -> TDPResult<f64> {
