@@ -79,6 +79,26 @@ impl ASUS {
             },
         }
     }
+
+    async fn set_throttle_thermal_policy(&self, throttle_policy: ThrottlePolicy) -> TDPResult<()> {
+        match RogDbusClient::new().await {
+            Ok((dbus, _)) => {
+                let platform = dbus.proxies().rog_bios();
+
+                match platform.set_throttle_thermal_policy(throttle_policy).await {
+                    Ok(()) => Ok(()),
+                    Err(_) => {
+                        log::warn!("Unable to use asusd to read tdp, asus-wmi interface will be used");
+                        Err(TDPError::FailedOperation(format!("")))
+                    },
+                }
+            },
+            Err(err) => {
+                log::warn!("Unable to use asusd to read tdp, asus-wmi interface will be used");
+                Err(TDPError::FailedOperation(format!("")))
+            }
+        }
+    }
 }
 
 impl TDPDevice for ASUS {
@@ -167,9 +187,18 @@ impl TDPDevice for ASUS {
             Ok((dbus, _)) => {
                 let platform = dbus.proxies().rog_bios();
 
-                Ok("".to_string())
+                match platform.throttle_thermal_policy().await {
+                    Ok(throttle_policy) => {
+                        match throttle_policy {
+                            ThrottlePolicy::Performance => Ok("max-performance".to_string()),
+                            ThrottlePolicy::Balanced => Ok("power-saving".to_string()),
+                            ThrottlePolicy::Quiet => Ok("power-saving".to_string()),
+                        }
+                    },
+                    Err(_) => Err(TDPError::FailedOperation(format!(""))),
+                }
             },
-            Err(err) => {
+            Err(_) => {
                 log::warn!("Unable to use asusd to read tdp, asus-wmi interface will be used");
                 Err(TDPError::FailedOperation(format!("")))
             }
@@ -179,16 +208,16 @@ impl TDPDevice for ASUS {
     async fn set_power_profile(&mut self, profile: String) -> TDPResult<()> {
         // possible values - "max-performance", "power-saving"
 
-        match RogDbusClient::new().await {
-            Ok((dbus, _)) => {
-                let platform = dbus.proxies().rog_bios();
-
+        match profile.as_str() {
+            "max-performance" => {
+                self.set_throttle_thermal_policy(ThrottlePolicy::Performance).await
+            },
+            "power-saving" => {
+                self.set_throttle_thermal_policy(ThrottlePolicy::Balanced).await
+            },
+            _ => {
                 Ok(())
             },
-            Err(err) => {
-                log::warn!("Unable to use asusd to read tdp, asus-wmi interface will be used");
-                Err(TDPError::FailedOperation(format!("")))
-            }
         }
     }
 }
