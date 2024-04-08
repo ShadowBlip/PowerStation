@@ -96,59 +96,7 @@ impl ASUS {
 
 impl TDPDevice for ASUS {
     async fn tdp(&self) -> TDPResult<f64> {
-        match RogDbusClient::new().await {
-            Ok((dbus, _)) => {
-                let platform = dbus.proxies().rog_bios();
-
-                match platform.ppt_fppt().await {
-                    Ok(result) => {
-                        log::info!("ppt_fppt: {}", result);
-                        Ok(self.tdp.into())
-                    },
-                    Err(_) => {
-                        match self.platform.lock() {
-                            Ok(platform) => {
-                                match platform.get_ppt_fppt() {
-                                    Ok(result) => {
-                                        log::info!("ppt_fppt: {}", result);
-                                        Ok(self.tdp.into())
-                                    },
-                                    Err(err) => {
-                                        log::warn!("Error fetching ppt_fppt: {}", err);
-                                        Err(TDPError::FailedOperation(format!("")))
-                                    }
-                                }
-                            },
-                            Err(_) => {
-                                log::warn!("Unable to use asus-wmi interface");
-                                Err(TDPError::FailedOperation(format!("")))
-                            },
-                        }
-                    }
-                }
-            },
-            Err(_) => {
-                log::warn!("Unable to use asusd to read tdp, asus-wmi interface will be used");
-                match self.platform.lock() {
-                    Ok(platform) => {
-                        match platform.get_ppt_fppt() {
-                            Ok(result) => {
-                                log::info!("ppt_fppt: {}", result);
-                                Ok(self.tdp.into())
-                            },
-                            Err(err) => {
-                                log::warn!("Error fetching ppt_fppt: {}", err);
-                                Err(TDPError::FailedOperation(format!("")))
-                            }
-                        }
-                    },
-                    Err(_) => {
-                        log::warn!("Unable to use asus-wmi interface");
-                        Err(TDPError::FailedOperation(format!("")))
-                    },
-                }
-            }
-        }
+        Ok(self.tdp.into())
     }
 
     async fn set_tdp(&mut self, value: f64) -> TDPResult<()> {
