@@ -18,7 +18,7 @@ impl ASUS {
     pub async fn new() -> Option<Self> {
         let asus_nb_wmi = std::path::Path::new("/sys/devices/platform/asus-nb-wmi");
 
-        match asus_nb_wmi.exists() {
+        match fs::metadata(asus_nb_wmi).await.is_ok() {
             true => {
                 Some(Self {
                     tdp: 5,
