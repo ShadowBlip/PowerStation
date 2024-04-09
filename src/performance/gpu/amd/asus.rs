@@ -1,15 +1,13 @@
-use std::sync::{Arc, Mutex};
+use tokio::{fs, io::{AsyncReadExt, AsyncWriteExt}};
 
 use crate::performance::gpu::tdp::{TDPDevice, TDPResult, TDPError};
 
 use rog_dbus::RogDbusClient;
-use rog_platform::platform::RogPlatform;
 use rog_platform::platform::ThrottlePolicy;
 
 /// Implementation of asusd with a fallback to asus-wmi sysfs
 /// See https://www.kernel.org/doc/html/v6.8-rc4/admin-guide/abi-testing.html#abi-sys-devices-platform-platform-ppt-apu-sppt
 pub struct ASUS {
-    platform: Arc<Mutex<RogPlatform>>,
     tdp: u8,
     boost: u8,
 }
@@ -18,18 +16,61 @@ impl ASUS {
 
     /// test if we are in an asus system with asus-wmi loaded
     pub async fn new() -> Option<Self> {
-        match RogPlatform::new() {
-            Ok(platform) => {
-                log::info!("Module asus-wmi WAS found");
+        let asus_nb_wmi = std::path::Path::new("/sys/devices/platform/asus-nb-wmi");
+
+        match asus_nb_wmi.exists() {
+            true => {
                 Some(Self {
-                    platform: Arc::new(Mutex::new(platform)),
                     tdp: 5,
                     boost: 0
                 })
             },
-            Err(err) => {
-                log::info!("Module asus-wmi not found: {}", err);
-                None
+            false => None,
+        }
+
+    }
+
+    async fn write(&self, var: &str, value: u8) -> TDPResult<()> {
+        match fs::File::create(format!("/sys/devices/platform/asus-nb-wmi/{}", var)).await {
+            Ok(mut file) => {
+                match file.write(value.to_string().as_bytes()).await {
+                    Ok(_) => Ok(()),
+                    Err(_) => {
+                        log::warn!("Unable to use asus-wmi interface");
+                        Err(TDPError::FailedOperation(format!("")))
+                    },
+                }
+            },
+            Err(_) => {
+                log::warn!("Unable to use asus-wmi interface");
+                Err(TDPError::FailedOperation(format!("")))
+            },
+        }
+    }
+
+    async fn read(&self, var: &str) -> TDPResult<u8> {
+        match fs::File::open(format!("/sys/devices/platform/asus-nb-wmi/{}", var)).await {
+            Ok(mut file) => {
+                let mut buf = String::new();
+                match file.read_to_string(&mut buf).await {
+                    Ok(_) => {
+                        match buf.parse::<u8>() {
+                            Ok(value) => Ok(value),
+                            Err(_) => {
+                                log::warn!("Unable to use asus-wmi interface");
+                                Err(TDPError::FailedOperation(format!("")))
+                            },
+                        }
+                    },
+                    Err(_) => {
+                        log::warn!("Unable to use asus-wmi interface");
+                        Err(TDPError::FailedOperation(format!("")))
+                    },
+                }
+            },
+            Err(_) => {
+                log::warn!("Unable to use asus-wmi interface");
+                Err(TDPError::FailedOperation(format!("")))
             }
         }
     }
@@ -44,32 +85,32 @@ impl ASUS {
                 match platform.set_ppt_fppt(self.tdp + self.boost).await {
                     Ok(()) => Ok(()),
                     Err(_) => {
-                        self.set_tdp_boost_wmi().await
+                        self.write("ppt_fppt", self.tdp + self.boost).await
                     },
                 }
             },
             Err(_) => {
                 log::warn!("Unable to use asusd to read tdp, asus-wmi interface will be used");
-                self.set_tdp_boost_wmi().await
+                self.write("ppt_fppt", self.tdp + self.boost).await
             }
         }
     }
 
-    async fn set_tdp_boost_wmi(&self) -> TDPResult<()> {
-        match self.platform.lock() {
-            Ok(platform) => {
-                match platform.set_ppt_fppt(self.tdp + self.boost) {
-                    Ok(()) => Ok(()),
-                    Err(err) => {
-                        log::warn!("Unable to set ppt_fppt: {}", err);
-                        Err(TDPError::FailedOperation(format!("")))
-                    }
-                }
+    async fn throttle_thermal_policy(&self) -> TDPResult<String> {
+        match self.read("throttle_thermal_policy").await {
+            Ok(value) => {
+                let res = match value {
+                    1 => "max-performance",
+                    0 => "power-saving",
+                    _ => "power-saving"
+                };
+
+                Ok(String::from(res))
             },
             Err(_) => {
                 log::warn!("Unable to use asus-wmi interface");
                 Err(TDPError::FailedOperation(format!("")))
-            },
+            }
         }
     }
 
@@ -82,13 +123,13 @@ impl ASUS {
                     Ok(()) => Ok(()),
                     Err(_) => {
                         log::warn!("Unable to use asusd to read tdp, asus-wmi interface will be used");
-                        Err(TDPError::FailedOperation(format!("")))
+                        self.write("throttle_thermal_policy", throttle_policy as u8).await
                     },
                 }
             },
             Err(_) => {
                 log::warn!("Unable to use asusd to read tdp, asus-wmi interface will be used");
-                Err(TDPError::FailedOperation(format!("")))
+                self.write("throttle_thermal_policy", throttle_policy as u8).await
             }
         }
     }
@@ -136,12 +177,15 @@ impl TDPDevice for ASUS {
                             ThrottlePolicy::Quiet => Ok("power-saving".to_string()),
                         }
                     },
-                    Err(_) => Err(TDPError::FailedOperation(format!(""))),
+                    Err(_) => {
+                        log::warn!("Unable to use asusd to read tdp, asus-wmi interface will be used");
+                        self.throttle_thermal_policy().await
+                    },
                 }
             },
             Err(_) => {
                 log::warn!("Unable to use asusd to read tdp, asus-wmi interface will be used");
-                Err(TDPError::FailedOperation(format!("")))
+                self.throttle_thermal_policy().await
             }
         }
     }
