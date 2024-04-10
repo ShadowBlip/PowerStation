@@ -9,9 +9,20 @@ use tokio::{
 
 use crate::performance::gpu::tdp::{TDPDevice, TDPResult, TDPError};
 
-use rog_dbus::RogDbusClient;
-use rog_platform::platform::ThrottlePolicy;
 use super::tdp::TDP;
+use crate::platform::asus::DaemonProxy;
+use zbus::Connection;
+
+struct RogDbusClient;
+
+impl<'a> RogDbusClient {
+    pub async fn new() -> zbus::Result<(DaemonProxy<'a>, Connection)> {
+        let connection = Connection::session().await?;
+        let proxy = DaemonProxy::new(&connection).await?;
+        
+        Ok((proxy, connection))
+    }
+}
 
 /// Implementation of asusd with a fallback to asus-wmi sysfs
 /// See https://www.kernel.org/doc/html/v6.8-rc4/admin-guide/abi-testing.html#abi-sys-devices-platform-platform-ppt-apu-sppt
@@ -97,9 +108,7 @@ impl ASUS {
 
     async fn set_tdp_boost(&self) -> TDPResult<()> {
         match RogDbusClient::new().await {
-            Ok((dbus, _)) => {
-                let platform = dbus.proxies().rog_bios();
-
+            Ok((platform, _)) => {
                 match platform.set_ppt_fppt(self.tdp + self.boost).await {
                     Ok(()) => Ok(()),
                     Err(err) => {
@@ -139,11 +148,12 @@ impl ASUS {
         }
     }
 
-    async fn set_throttle_thermal_policy(&self, throttle_policy: ThrottlePolicy) -> TDPResult<()> {
+    async fn set_throttle_thermal_policy(&self, throttle_policy: u32) -> TDPResult<()> {
+        // Balanced = 0
+        // Performance = 1
+        // Quiet = 2
         match RogDbusClient::new().await {
-            Ok((dbus, _)) => {
-                let platform = dbus.proxies().rog_bios();
-
+            Ok((platform, _)) => {
                 match platform.set_throttle_thermal_policy(throttle_policy).await {
                     Ok(()) => Ok(()),
                     Err(err) => {
@@ -159,7 +169,7 @@ impl ASUS {
                 self.write("throttle_thermal_policy", throttle_policy as u8).await
             }
         }.and_then(|_| {
-            log::debug!("Set power profile: {}", throttle_policy);
+            log::debug!("Set power profile: {:?}", throttle_policy);
             Ok(())
         })
     }
@@ -204,15 +214,14 @@ impl TDPDevice for ASUS {
 
     async fn power_profile(&self) -> TDPResult<String> {
         match RogDbusClient::new().await {
-            Ok((dbus, _)) => {
-                let platform = dbus.proxies().rog_bios();
-
+            Ok((platform, _)) => {
                 match platform.throttle_thermal_policy().await {
                     Ok(throttle_policy) => {
                         match throttle_policy {
-                            ThrottlePolicy::Performance => Ok("max-performance".to_string()),
-                            ThrottlePolicy::Balanced => Ok("power-saving".to_string()),
-                            ThrottlePolicy::Quiet => Ok("power-saving".to_string()),
+                            1 => Ok("max-performance".to_string()),
+                            0 => Ok("power-saving".to_string()),
+                            2 => Ok("power-saving".to_string()),
+                            _ => Ok("max-performance".to_string()),
                         }
                     },
                     Err(err) => {
@@ -235,10 +244,10 @@ impl TDPDevice for ASUS {
 
         match profile.as_str() {
             "max-performance" => {
-                self.set_throttle_thermal_policy(ThrottlePolicy::Performance).await
+                self.set_throttle_thermal_policy(1).await
             },
             "power-saving" => {
-                self.set_throttle_thermal_policy(ThrottlePolicy::Balanced).await
+                self.set_throttle_thermal_policy(0).await
             },
             _ => {
                 Ok(())

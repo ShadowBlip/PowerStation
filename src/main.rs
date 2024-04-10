@@ -11,6 +11,7 @@ use crate::performance::gpu::dbus;
 
 mod constants;
 mod performance;
+mod platform;
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 2)]
 async fn main() -> Result<(), Box<dyn Error>> {

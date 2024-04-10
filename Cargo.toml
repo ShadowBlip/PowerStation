@@ -24,10 +24,6 @@ simple_logger = "4.2.0"
 tokio = { version = "*", features = ["full"] }
 zbus = { version = "3.14.1", default-features = false, features = ["tokio"] }
 zbus_macros = "3.14.1"
-rog_dbus = { git = "https://gitlab.com/asus-linux/asusctl.git" }
-rog_platform = { git = "https://gitlab.com/asus-linux/asusctl.git" }
-rog_profiles = { git = "https://gitlab.com/asus-linux/asusctl.git" }
-
 
 [profile.release]
 debug = false
