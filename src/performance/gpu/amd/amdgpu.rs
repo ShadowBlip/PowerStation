@@ -42,7 +42,7 @@ impl GPUDevice for AMDGPU {
     async fn get_tdp_interface(&self) -> Option<Arc<Mutex<TDPDevices>>> {
         // if asusd is present, or asus-wmi is present this is where it is bound to the GPU
         match self.class.as_str() {
-            "integrated" => match ASUS::new().await {
+            "integrated" => match ASUS::new(self.path.clone(), self.device_id.clone()).await {
                 Some(asus_tdp) => {
                     log::info!("Using asus interface for TDP control");
                     Some(Arc::new(Mutex::new(TDPDevices::ASUS(asus_tdp))))

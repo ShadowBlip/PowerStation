@@ -1,31 +1,49 @@
-use tokio::{fs, io::{AsyncReadExt, AsyncWriteExt}};
+use std::sync::Arc;
+
+use tokio::{
+    sync::Mutex,
+    fs,
+    io::{AsyncReadExt, AsyncWriteExt},
+    task::spawn_blocking
+};
 
 use crate::performance::gpu::tdp::{TDPDevice, TDPResult, TDPError};
 
 use rog_dbus::RogDbusClient;
 use rog_platform::platform::ThrottlePolicy;
+use super::tdp::TDP;
 
 /// Implementation of asusd with a fallback to asus-wmi sysfs
 /// See https://www.kernel.org/doc/html/v6.8-rc4/admin-guide/abi-testing.html#abi-sys-devices-platform-platform-ppt-apu-sppt
 pub struct ASUS {
     tdp: u8,
     boost: u8,
+    ryzenadj: Arc<Mutex<TDP>>,
 }
 
 impl ASUS {
 
     /// test if we are in an asus system with asus-wmi loaded
-    pub async fn new() -> Option<Self> {
+    pub async fn new(path: String, device_id: String) -> Option<Self> {
         let asus_nb_wmi = std::path::Path::new("/sys/devices/platform/asus-nb-wmi");
 
         match fs::metadata(asus_nb_wmi).await.is_ok() {
             true => {
                 log::info!("ASUS device detected, using asus-wmi");
 
-                Some(Self {
-                    tdp: 5,
-                    boost: 0
-                })
+                match spawn_blocking(|| Arc::new(Mutex::new(TDP::new(path, device_id)))).await {
+                    Ok(ryzenadj) => {
+                        Some(Self {
+                            tdp: 5,
+                            boost: 0,
+                            ryzenadj,
+                        })
+                    },
+                    Err(err) => {
+                        log::error!("{}", err);
+                        None
+                    },
+                }
             },
             false => None,
         }
@@ -169,11 +187,19 @@ impl TDPDevice for ASUS {
     }
 
     async fn thermal_throttle_limit_c(&self) -> TDPResult<f64> {
-        Ok(0.0)
+        match self.ryzenadj.lock().await.thermal_throttle_limit_c().await {
+            Ok(value) => {
+                Ok(value)
+            },
+            Err(_) => return Err(TDPError::FailedOperation(format!("Failed to call RyzenAdj"))),
+        }
     }
 
-    async fn set_thermal_throttle_limit_c(&mut self, _limit: f64) -> TDPResult<()> {
-        Ok(())
+    async fn set_thermal_throttle_limit_c(&mut self, limit: f64) -> TDPResult<()> {
+        match self.ryzenadj.lock().await.set_thermal_throttle_limit_c(limit).await {
+            Ok(()) => Ok(()),
+            Err(_) => return Err(TDPError::FailedOperation(format!("Failed to call RyzenAdj"))),
+        }
     }
 
     async fn power_profile(&self) -> TDPResult<String> {
