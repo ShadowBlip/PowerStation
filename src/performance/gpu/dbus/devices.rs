@@ -6,7 +6,7 @@ use crate::performance::gpu::{interface::GPUDevice, tdp::{TDPDevice, TDPResult}}
 use crate::performance::gpu::interface::GPUResult;
 
 pub enum TDPDevices {
-    //ASUS(crate::performance::gpu::amd::asus::ASUS),
+    ASUS(crate::performance::gpu::amd::asus::ASUS),
     AMD(crate::performance::gpu::amd::tdp::TDP),
     INTEL(crate::performance::gpu::intel::tdp::TDP)
 }
@@ -14,7 +14,7 @@ pub enum TDPDevices {
 impl TDPDevices {
     pub async fn tdp(&self) -> TDPResult<f64> {
         match self {
-            //Self::ASUS(dev) => dev.tdp().await,
+            Self::ASUS(dev) => dev.tdp().await,
             Self::AMD(dev) => dev.tdp().await,
             Self::INTEL(dev) => dev.tdp().await,
         }
@@ -22,7 +22,7 @@ impl TDPDevices {
 
     pub async fn set_tdp(&mut self, value: f64) -> TDPResult<()> {
         match self {
-            //Self::ASUS(dev) => dev.set_tdp(value).await,
+            Self::ASUS(dev) => dev.set_tdp(value).await,
             Self::AMD(dev) => dev.set_tdp(value).await,
             Self::INTEL(dev) => dev.set_tdp(value).await,
         }
@@ -30,7 +30,7 @@ impl TDPDevices {
 
     pub async fn boost(&self) -> TDPResult<f64> {
         match self {
-            //Self::ASUS(dev) => dev.boost().await,
+            Self::ASUS(dev) => dev.boost().await,
             Self::AMD(dev) => dev.boost().await,
             Self::INTEL(dev) => dev.boost().await,
         }
@@ -38,7 +38,7 @@ impl TDPDevices {
 
     pub async fn set_boost(&mut self, value: f64) -> TDPResult<()> {
         match self {
-            //Self::ASUS(dev) => dev.set_boost(value).await,
+            Self::ASUS(dev) => dev.set_boost(value).await,
             Self::AMD(dev) => dev.set_boost(value).await,
             Self::INTEL(dev) => dev.set_boost(value).await,
         }
@@ -46,7 +46,7 @@ impl TDPDevices {
 
     pub async fn thermal_throttle_limit_c(&self) -> TDPResult<f64> {
         match self {
-            //Self::ASUS(dev) => dev.thermal_throttle_limit_c().await,
+            Self::ASUS(dev) => dev.thermal_throttle_limit_c().await,
             Self::AMD(dev) => dev.thermal_throttle_limit_c().await,
             Self::INTEL(dev) => dev.thermal_throttle_limit_c().await,
         }
@@ -54,7 +54,7 @@ impl TDPDevices {
 
     pub async fn set_thermal_throttle_limit_c(&mut self, limit: f64) -> TDPResult<()> {
         match self {
-            //Self::ASUS(dev) => dev.set_thermal_throttle_limit_c(limit).await,
+            Self::ASUS(dev) => dev.set_thermal_throttle_limit_c(limit).await,
             Self::AMD(dev) => dev.set_thermal_throttle_limit_c(limit).await,
             Self::INTEL(dev) => dev.set_thermal_throttle_limit_c(limit).await,
         }
@@ -62,7 +62,7 @@ impl TDPDevices {
 
     pub async fn power_profile(&self) -> TDPResult<String> {
         match self {
-            //Self::ASUS(dev) => dev.power_profile().await,
+            Self::ASUS(dev) => dev.power_profile().await,
             Self::AMD(dev) => dev.power_profile().await,
             Self::INTEL(dev) => dev.power_profile().await,
         }
@@ -70,7 +70,7 @@ impl TDPDevices {
 
     pub async fn set_power_profile(&mut self, profile: String) -> TDPResult<()> {
         match self {
-            //Self::ASUS(dev) => dev.set_power_profile(profile).await,
+            Self::ASUS(dev) => dev.set_power_profile(profile).await,
             Self::AMD(dev) => dev.set_power_profile(profile).await,
             Self::INTEL(dev) => dev.set_power_profile(profile).await,
         }
