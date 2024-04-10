@@ -197,19 +197,11 @@ impl TDPDevice for ASUS {
     }
 
     async fn thermal_throttle_limit_c(&self) -> TDPResult<f64> {
-        match self.ryzenadj.lock().await.thermal_throttle_limit_c().await {
-            Ok(value) => {
-                Ok(value)
-            },
-            Err(_) => return Err(TDPError::FailedOperation(format!("Failed to call RyzenAdj"))),
-        }
+        self.ryzenadj.lock().await.thermal_throttle_limit_c().await
     }
 
     async fn set_thermal_throttle_limit_c(&mut self, limit: f64) -> TDPResult<()> {
-        match self.ryzenadj.lock().await.set_thermal_throttle_limit_c(limit).await {
-            Ok(()) => Ok(()),
-            Err(_) => return Err(TDPError::FailedOperation(format!("Failed to call RyzenAdj"))),
-        }
+        self.ryzenadj.lock().await.set_thermal_throttle_limit_c(limit).await
     }
 
     async fn power_profile(&self) -> TDPResult<String> {
