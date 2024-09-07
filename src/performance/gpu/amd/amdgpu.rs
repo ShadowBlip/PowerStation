@@ -1,19 +1,19 @@
 use std::{
     fs::{self, OpenOptions},
     io::Write,
-    sync::Arc
+    sync::Arc,
 };
 
 use tokio::sync::Mutex;
 
 use crate::constants::GPU_PATH;
-use crate::performance::gpu::interface::GPUDevice;
 use crate::performance::gpu::amd;
 use crate::performance::gpu::dbus::devices::TDPDevices;
+use crate::performance::gpu::interface::GPUDevice;
 use crate::performance::gpu::interface::{GPUError, GPUResult};
 
 #[derive(Debug, Clone)]
-pub struct AMDGPU {
+pub struct AmdGpu {
     pub name: String,
     pub path: String,
     pub class: String,
@@ -22,16 +22,14 @@ pub struct AMDGPU {
     pub vendor_id: String,
     pub device: String,
     pub device_id: String,
-    pub device_type: String,
+    //pub device_type: String,
     pub subdevice: String,
     pub subdevice_id: String,
     pub subvendor_id: String,
     pub revision_id: String,
 }
 
-
-impl GPUDevice for AMDGPU {
-
+impl GPUDevice for AmdGpu {
     async fn get_gpu_path(&self) -> String {
         format!("{0}/{1}", GPU_PATH, self.name().await)
     }
@@ -40,22 +38,14 @@ impl GPUDevice for AMDGPU {
     async fn get_tdp_interface(&self) -> Option<Arc<Mutex<TDPDevices>>> {
         // if asusd is present, or asus-wmi is present this is where it is bound to the GPU
         match self.class.as_str() {
-            "integrated" => Some(
-                Arc::new(
-                    Mutex::new(
-                        TDPDevices::AMD(
-                            amd::tdp::TDP::new(
-                                self.path.clone(),
-                                self.device_id.clone()
-                            )
-                        )
-                    )
-                )
-            ),
+            "integrated" => Some(Arc::new(Mutex::new(TDPDevices::Amd(amd::tdp::Tdp::new(
+                self.path.clone(),
+                self.device_id.clone(),
+            ))))),
             _ => None,
         }
     }
-    
+
     async fn name(&self) -> String {
         self.name.clone()
     }
@@ -143,20 +133,19 @@ impl GPUDevice for AMDGPU {
             command.clone().trim(),
             path.clone()
         );
-        file
-            .map_err(|err| GPUError::FailedOperation(err.to_string()))?
+        file.map_err(|err| GPUError::FailedOperation(err.to_string()))?
             .write_all(command.as_bytes())
             .map_err(|err| GPUError::IOError(err.to_string()))?;
 
         // Write the "commit" command
         log::debug!("Writing value '{}' to: {}", "c", path.clone());
 
-        Ok(
-            OpenOptions::new().write(true).open(path)
-                .map_err(|err| GPUError::FailedOperation(err.to_string()))?
-                .write_all("c\n".as_bytes())
-                .map_err(|err| GPUError::IOError(err.to_string()))?
-        )
+        OpenOptions::new()
+            .write(true)
+            .open(path)
+            .map_err(|err| GPUError::FailedOperation(err.to_string()))?
+            .write_all("c\n".as_bytes())
+            .map_err(|err| GPUError::IOError(err.to_string()))
     }
 
     async fn clock_value_mhz_max(&self) -> GPUResult<f64> {
@@ -177,18 +166,17 @@ impl GPUDevice for AMDGPU {
         let file = OpenOptions::new().write(true).open(path.clone());
 
         // Write the value
-        file
-            .map_err(|err| GPUError::FailedOperation(err.to_string()))?
+        file.map_err(|err| GPUError::FailedOperation(err.to_string()))?
             .write_all(command.as_bytes())
             .map_err(|err| GPUError::IOError(err.to_string()))?;
 
         // Write the "commit" command
-        Ok(
-            OpenOptions::new().write(true).open(path)
-                .map_err(|err| GPUError::FailedOperation(err.to_string()))?
-                .write_all("c\n".as_bytes())
-                .map_err(|err| GPUError::IOError(err.to_string()))?
-        )
+        OpenOptions::new()
+            .write(true)
+            .open(path)
+            .map_err(|err| GPUError::FailedOperation(err.to_string()))?
+            .write_all("c\n".as_bytes())
+            .map_err(|err| GPUError::IOError(err.to_string()))
     }
 
     async fn manual_clock(&self) -> GPUResult<bool> {
@@ -218,12 +206,12 @@ impl GPUDevice for AMDGPU {
         );
 
         // Write the value
-        Ok(
-            OpenOptions::new().write(true).open(path)
-                .map_err(|err| GPUError::FailedOperation(err.to_string()))?
-                .write_all(status.as_bytes())
-                .map_err(|err| GPUError::IOError(err.to_string()))?
-        )
+        OpenOptions::new()
+            .write(true)
+            .open(path)
+            .map_err(|err| GPUError::FailedOperation(err.to_string()))?
+            .write_all(status.as_bytes())
+            .map_err(|err| GPUError::IOError(err.to_string()))
     }
 }
 
@@ -239,7 +227,7 @@ fn get_clock_limits(gpu_path: String) -> Result<(f64, f64), std::io::Error> {
     let mut min: Option<f64> = None;
     let mut max: Option<f64> = None;
     for line in lines {
-        let mut parts = line.trim().split_whitespace();
+        let mut parts = line.split_whitespace();
         let part1 = parts.next();
         if !part1.is_some_and(|part| part == "SCLK:") {
             continue;
@@ -288,7 +276,7 @@ fn get_clock_values(gpu_path: String) -> Result<(f64, f64), std::io::Error> {
     let mut min: Option<f64> = None;
     let mut max: Option<f64> = None;
     for line in lines {
-        let mut parts = line.trim().split_whitespace();
+        let mut parts = line.split_whitespace();
         let part1 = parts.next();
         if !part1.is_some_and(|part| part == "0:" || part == "1:") {
             continue;

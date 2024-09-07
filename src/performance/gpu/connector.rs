@@ -48,7 +48,7 @@ impl Connector {
             .trim()
             .to_lowercase();
 
-        return Ok(status == "enabled");
+        Ok(status == "enabled")
     }
 
     #[dbus_interface(property)]
@@ -68,7 +68,7 @@ impl Connector {
             modes.push(mode);
         }
 
-        return Ok(modes);
+        Ok(modes)
     }
 
     #[dbus_interface(property)]
@@ -81,7 +81,7 @@ impl Connector {
             .trim()
             .to_lowercase();
 
-        return Ok(status);
+        Ok(status)
     }
 
     #[dbus_interface(property, name = "DPMS")]
@@ -94,6 +94,6 @@ impl Connector {
             .trim()
             .to_lowercase();
 
-        return Ok(status == "on");
+        Ok(status == "on")
     }
 }

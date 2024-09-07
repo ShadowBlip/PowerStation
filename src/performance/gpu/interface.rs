@@ -11,8 +11,8 @@ pub enum GPUError {
     IOError(String),
 }
 
-impl Into<String> for GPUError {
-    fn into(self) -> std::string::String {
+impl From<GPUError> for String {
+    fn from(val: GPUError) -> Self {
         todo!()
     }
 }
@@ -24,7 +24,7 @@ pub trait GPUDevice: Send + Sync {
     async fn get_tdp_interface(&self) -> Option<Arc<Mutex<TDPDevices>>>;
 
     async fn get_gpu_path(&self) -> String;
-    
+
     async fn name(&self) -> String;
     async fn path(&self) -> String;
     async fn class(&self) -> String;

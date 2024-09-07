@@ -1,16 +1,16 @@
 use std::{
     fs::{self, OpenOptions},
     io::Write,
-    sync::Arc
+    sync::Arc,
 };
 
 use tokio::sync::Mutex;
 
 use crate::constants::PREFIX;
-use crate::performance::gpu::interface::GPUDevice;
-use crate::performance::gpu::intel;
-use crate::performance::gpu::interface::{GPUError, GPUResult};
 use crate::performance::gpu::dbus::devices::TDPDevices;
+use crate::performance::gpu::intel;
+use crate::performance::gpu::interface::GPUDevice;
+use crate::performance::gpu::interface::{GPUError, GPUResult};
 
 #[derive(Debug, Clone)]
 pub struct IntelGPU {
@@ -22,7 +22,7 @@ pub struct IntelGPU {
     pub vendor_id: String,
     pub device: String,
     pub device_id: String,
-    pub device_type: String,
+    //pub device_type: String,
     pub subdevice: String,
     pub subdevice_id: String,
     pub subvendor_id: String,
@@ -30,9 +30,7 @@ pub struct IntelGPU {
     pub manual_clock: bool,
 }
 
-
 impl GPUDevice for IntelGPU {
-    
     async fn get_gpu_path(&self) -> String {
         format!("{0}/GPU/{1}", PREFIX, self.name().await)
     }
@@ -40,17 +38,9 @@ impl GPUDevice for IntelGPU {
     /// Returns the TDP DBus interface for this GPU
     async fn get_tdp_interface(&self) -> Option<Arc<Mutex<TDPDevices>>> {
         match self.class.as_str() {
-            "integrated" => Some(
-                Arc::new(
-                    Mutex::new(
-                        TDPDevices::INTEL(
-                            intel::tdp::TDP::new(
-                                self.path.clone()
-                            )
-                        )
-                    )
-                )
-            ),
+            "integrated" => Some(Arc::new(Mutex::new(TDPDevices::Intel(
+                intel::tdp::Tdp::new(self.path.clone()),
+            )))),
             _ => None,
         }
     }
@@ -112,7 +102,7 @@ impl GPUDevice for IntelGPU {
             .parse::<f64>()
             .map_err(|err| GPUError::FailedOperation(err.to_string()))?;
 
-        return Ok(limit);
+        Ok(limit)
     }
 
     async fn clock_limit_mhz_max(&self) -> GPUResult<f64> {
@@ -123,7 +113,7 @@ impl GPUDevice for IntelGPU {
             .parse::<f64>()
             .map_err(|err| GPUError::FailedOperation(err.to_string()))?;
 
-        return Ok(limit);
+        Ok(limit)
     }
 
     async fn clock_value_mhz_min(&self) -> GPUResult<f64> {
@@ -135,7 +125,7 @@ impl GPUDevice for IntelGPU {
             .parse::<f64>()
             .map_err(|err| GPUError::FailedOperation(err.to_string()))?;
 
-        return Ok(value);
+        Ok(value)
     }
 
     async fn set_clock_value_mhz_min(&mut self, value: f64) -> GPUResult<()> {
@@ -150,12 +140,11 @@ impl GPUDevice for IntelGPU {
         let file = OpenOptions::new().write(true).open(path);
 
         // Write the value
-        file
-            .map_err(|err| GPUError::FailedOperation(err.to_string()))?
+        file.map_err(|err| GPUError::FailedOperation(err.to_string()))?
             .write_all(value.to_string().as_bytes())
             .map_err(|err| GPUError::IOError(err.to_string()))?;
 
-        return Ok(());
+        Ok(())
     }
 
     async fn clock_value_mhz_max(&self) -> GPUResult<f64> {
@@ -167,7 +156,7 @@ impl GPUDevice for IntelGPU {
             .parse::<f64>()
             .map_err(|err| GPUError::FailedOperation(err.to_string()))?;
 
-        return Ok(value);
+        Ok(value)
     }
 
     async fn set_clock_value_mhz_max(&mut self, value: f64) -> GPUResult<()> {
@@ -182,20 +171,19 @@ impl GPUDevice for IntelGPU {
         let file = OpenOptions::new().write(true).open(path);
 
         // Write the value
-        file
-            .map_err(|err| GPUError::FailedOperation(err.to_string()))?
+        file.map_err(|err| GPUError::FailedOperation(err.to_string()))?
             .write_all(value.to_string().as_bytes())
             .map_err(|err| GPUError::IOError(err.to_string()))?;
 
-        return Ok(());
+        Ok(())
     }
 
     async fn manual_clock(&self) -> GPUResult<bool> {
-        return Ok(self.manual_clock.clone());
+        Ok(self.manual_clock)
     }
 
     async fn set_manual_clock(&mut self, enabled: bool) -> GPUResult<()> {
         self.manual_clock = enabled;
-        return Ok(());
+        Ok(())
     }
 }
