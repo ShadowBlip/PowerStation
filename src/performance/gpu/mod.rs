@@ -1,6 +1,8 @@
-pub mod tdp;
-pub mod dbus;
-pub mod connector;
-pub mod intel;
+pub mod acpi;
 pub mod amd;
+pub mod asus;
+pub mod connector;
+pub mod dbus;
+pub mod intel;
 pub mod interface;
+pub mod tdp;

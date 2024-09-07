@@ -3,11 +3,8 @@ use std::{error::Error, future::pending};
 use zbus::Connection;
 
 use crate::constants::{BUS_NAME, CPU_PATH, GPU_PATH};
-use crate::dbus::gpu::get_connectors;
-use crate::dbus::gpu::get_gpus;
-use crate::dbus::gpu::GPUBus;
-use crate::performance::cpu::cpu;
-use crate::performance::gpu::dbus;
+use crate::dbus::gpu::{get_connectors, get_gpus, GPUBus};
+use crate::performance::{cpu::cpu_features, gpu::dbus};
 
 mod constants;
 mod performance;
@@ -19,8 +16,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
     log::info!("Starting PowerStation v{}", VERSION);
 
     // Discover all CPUs
-    let cpu = cpu::CPU::new();
-    let cores = cpu::get_cores();
+    let cpu = cpu_features::Cpu::new();
+    let cores = cpu_features::get_cores();
 
     // Configure the connection
     let connection = Connection::system().await?;
@@ -46,7 +43,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             Some(tdp) => {
                 log::debug!("Discovered TDP interface on card: {}", card_name);
                 connection.object_server().at(gpu_path.clone(), tdp).await?;
-            },
+            }
             None => {
                 log::warn!("Card {} does not have a TDP interface", card_name);
             }

@@ -1,332 +1,312 @@
-use libryzenadj::RyzenAdj;
+use crate::performance::gpu::{
+    acpi::firmware::Acpi,
+    asus::asus_wmi::AsusWmi,
+    tdp::{TDPDevice, TDPError, TDPResult},
+};
 
-use crate::performance::gpu::tdp::{TDPDevice, TDPError, TDPResult};
-
-/// Steam Deck GPU ID
-const DEV_ID_VANGOGH: &str = "163f";
-const DEV_ID_SEPHIROTH: &str = "1435";
+use super::ryzenadj::RyzenAdjTdp;
 
 /// Implementation of TDP control for AMD GPUs
 pub struct Tdp {
-    //pub path: String,
-    pub device_id: String,
-    pub profile: String,
-    pub unsupported_stapm_limit: f32,
-    pub unsupported_ppt_limit_fast: f32,
-    pub unsupported_thm_limit: f32,
+    asus_wmi: Option<AsusWmi>,
+    acpi: Option<Acpi>,
+    ryzenadj: Option<RyzenAdjTdp>,
 }
 
-unsafe impl Sync for Tdp {} // implementor (RyzenAdj) may be unsafe
-unsafe impl Send for Tdp {} // implementor (RyzenAdj) may be unsafe
-
 impl Tdp {
-    /// Create a new TDP instance
-    pub fn new(_path: String, device_id: String) -> Tdp {
-        // Currently there is no known way to read this value
-        let profile = String::from("power-saving");
+    pub async fn new(path: &str, device_id: &str) -> Tdp {
+        let asus_wmi = match AsusWmi::new().await {
+            Some(asus_wmi) => {
+                log::info!("Found Asus WMI interface for TDP control");
+                Some(asus_wmi)
+            }
+            None => None,
+        };
 
-        // Set fake TDP limits for GPUs that don't support ryzenadj monitoring (e.g. Steam Deck)
-        let unsupported_stapm_limit: f32 = match device_id.as_str() {
-            DEV_ID_VANGOGH => 12.0,
-            DEV_ID_SEPHIROTH => 12.0,
-            _ => 10.0,
+        let acpi = match Acpi::new().await {
+            Some(acpi) => {
+                log::info!("Found ACPI interface for platform profile control");
+                Some(acpi)
+            }
+            None => None,
         };
-        let unsupported_ppt_limit_fast: f32 = match device_id.as_str() {
-            DEV_ID_VANGOGH => 15.0,
-            DEV_ID_SEPHIROTH => 15.0,
-            _ => 10.0,
-        };
-        let unsupported_thm_limit: f32 = match device_id.as_str() {
-            DEV_ID_VANGOGH => 95.0,
-            DEV_ID_SEPHIROTH => 95.0,
-            _ => 95.0,
+
+        let ryzenadj = match RyzenAdjTdp::new(path.to_string(), device_id.to_string()) {
+            Ok(ryzenadj) => {
+                log::info!("Found RyzenAdj interface for TDP control");
+                Some(ryzenadj)
+            }
+            Err(e) => {
+                log::warn!("Failed to create Ryzenadj Instance: {e:?}");
+                None
+            }
         };
 
         Tdp {
-            //path,
-            device_id,
-            profile,
-            unsupported_stapm_limit,
-            unsupported_ppt_limit_fast,
-            unsupported_thm_limit,
-        }
-    }
-
-    /// Returns true if ryzenadj cannot read values from the given GPU
-    fn is_unsupported_gpu(&self) -> bool {
-        matches!(self.device_id.as_str(), DEV_ID_VANGOGH | DEV_ID_SEPHIROTH)
-    }
-
-    /// Set the current Slow PPT limit using ryzenadj
-    fn set_ppt_limit_slow(&mut self, value: u32) -> Result<(), String> {
-        log::debug!("Setting slow ppt limit to {}", value);
-        let ryzenadj = RyzenAdj::new().map_err(|err| err.to_string())?;
-        match ryzenadj.set_slow_limit(value) {
-            Ok(x) => Ok(x),
-            Err(e) => {
-                let err = format!("Failed to set slow ppt limit: {}", e);
-                log::error!("{}", err);
-                Err(err)
-            }
-        }
-    }
-
-    //// Get the PPT slow limit
-    //fn get_ppt_limit_slow(&self) -> Result<f32, String> {
-    //    log::debug!("Getting ppt slow limit");
-    //    let ryzenadj = RyzenAdj::new().map_err(|err| err.to_string())?;
-    //    match ryzenadj.get_slow_limit() {
-    //        Ok(x) => Ok(x),
-    //        Err(e) => {
-    //            let err = format!("Failed to get ppt slow limit: {}", e);
-    //            log::error!("{}", err);
-    //            Err(String::from(err))
-    //        }
-    //    }
-    //}
-
-    /// Set the current Fast PPT limit using ryzenadj
-    fn set_ppt_limit_fast(&mut self, value: u32) -> Result<(), String> {
-        log::debug!("Setting fast ppt limit to {}", value);
-        if self.is_unsupported_gpu() {
-            self.unsupported_ppt_limit_fast = value as f32;
-        }
-        let ryzenadj = RyzenAdj::new().map_err(|err| err.to_string())?;
-        match ryzenadj.set_fast_limit(value) {
-            Ok(x) => Ok(x),
-            Err(e) => {
-                let err = format!("Failed to set fast ppt limit: {}", e);
-                log::error!("{}", err);
-                Err(err)
-            }
-        }
-    }
-
-    /// Get the PPT fast limit
-    fn get_ppt_limit_fast(&self) -> Result<f32, String> {
-        log::debug!("Getting ppt fast limit");
-
-        // Return what we _think_ the value is for unsupported GPUs
-        if self.is_unsupported_gpu() {
-            return Ok(self.unsupported_ppt_limit_fast);
-        }
-
-        // Get the fast limit from ryzenadj
-        let ryzenadj = RyzenAdj::new().map_err(|err| err.to_string())?;
-        match ryzenadj.get_fast_limit() {
-            Ok(x) => {
-                log::debug!("Got fast limit: {}", x);
-                Ok(x)
-            }
-            Err(e) => {
-                let err = format!("Failed to get ppt fast limit: {}", e);
-                log::error!("{}", err);
-                Err(err)
-            }
-        }
-    }
-
-    /// Set the current TDP value using ryzenadj
-    fn set_stapm_limit(&mut self, value: u32) -> Result<(), String> {
-        log::debug!("Setting stapm limit to {}", value);
-        if self.is_unsupported_gpu() {
-            self.unsupported_stapm_limit = value as f32;
-        }
-        let ryzenadj = RyzenAdj::new().map_err(|err| err.to_string())?;
-        match ryzenadj.set_stapm_limit(value) {
-            Ok(x) => {
-                log::debug!("Set stapm limit to {}", value);
-                Ok(x)
-            }
-            Err(e) => {
-                let err = format!("Failed to set stapm limit: {}", e);
-                log::error!("{}", err);
-                Err(err)
-            }
-        }
-    }
-
-    /// Returns the current TDP value using ryzenadj
-    fn get_stapm_limit(&self) -> Result<f32, String> {
-        log::debug!("Getting stapm limit");
-
-        // Return what we _think_ the value is for unsupported GPUs
-        if self.is_unsupported_gpu() {
-            return Ok(self.unsupported_stapm_limit);
-        }
-
-        // Get the value from ryzenadj
-        let ryzenadj = RyzenAdj::new().map_err(|err| err.to_string())?;
-        match ryzenadj.get_stapm_limit() {
-            Ok(x) => {
-                log::debug!("Got stapm limit: {}", x);
-                Ok(x)
-            }
-            Err(e) => {
-                let err = format!("Failed to get stapm limit: {}", e);
-                log::error!("{}", err);
-                Err(err)
-            }
-        }
-    }
-
-    // Sets the thermal limit value using ryzenadj
-    fn set_thm_limit(&mut self, value: u32) -> Result<(), String> {
-        log::debug!("Setting thm limit to: {}", value);
-        if self.is_unsupported_gpu() {
-            self.unsupported_thm_limit = value as f32;
-        }
-        let ryzenadj = RyzenAdj::new().map_err(|err| err.to_string())?;
-        match ryzenadj.set_tctl_temp(value) {
-            Ok(x) => Ok(x),
-            Err(e) => {
-                let err = format!("Failed to set tctl limit: {}", e);
-                log::error!("{}", err);
-                Err(err)
-            }
-        }
-    }
-
-    /// Returns the current thermal limit value using ryzenadj
-    fn get_thm_limit(&self) -> Result<f32, String> {
-        log::debug!("Getting thm limit");
-
-        // Return what we _think_ the value is for unsupported GPUs
-        if self.is_unsupported_gpu() {
-            return Ok(self.unsupported_thm_limit);
-        }
-
-        // Get the value from ryzenadj
-        let ryzenadj = RyzenAdj::new().map_err(|err| err.to_string())?;
-        match ryzenadj.get_tctl_temp() {
-            Ok(x) => Ok(x),
-            Err(e) => {
-                let err = format!("Failed to get tctl temp: {}", e);
-                log::error!("{}", err);
-                Err(err)
-            }
-        }
-    }
-
-    /// Set the power profile to the given profile
-    fn set_power_profile(&self, profile: String) -> Result<(), String> {
-        log::debug!("Setting power profile");
-        let ryzenadj = RyzenAdj::new().map_err(|err| err.to_string())?;
-        match profile.as_str() {
-            "power-saving" => ryzenadj.set_power_saving().map_err(|err| err.to_string()),
-            "max-performance" => ryzenadj
-                .set_max_performance()
-                .map_err(|err| err.to_string()),
-            _ => Err(String::from(
-                "Invalid power profile. Must be in [max-performance, power-saving]",
-            )),
+            asus_wmi,
+            acpi,
+            ryzenadj,
         }
     }
 }
 
 impl TDPDevice for Tdp {
     async fn tdp(&self) -> TDPResult<f64> {
-        // Get the current stapm limit from ryzenadj
-        match Tdp::get_stapm_limit(self) {
-            Ok(result) => Ok(result.into()),
-            Err(err) => Err(TDPError::FailedOperation(err.to_string())),
-        }
+        log::info!("Get TDP");
+
+        // TODO: set platform profile based on % of max TDP.
+        if self.asus_wmi.is_some() {
+            let asus_wmi = self.asus_wmi.as_ref().unwrap();
+            match asus_wmi.tdp().await {
+                Ok(tdp) => {
+                    log::info!("TDP is currently {tdp}");
+                    return Ok(tdp);
+                }
+                Err(e) => {
+                    log::warn!("Failed to read current TDP using Asus WMI: {e:?}");
+                }
+            };
+        };
+        // TODO: set platform profile based on % of max TDP.
+        if self.ryzenadj.is_some() {
+            let ryzenadj = self.ryzenadj.as_ref().unwrap();
+            match ryzenadj.tdp().await {
+                Ok(tdp) => {
+                    log::info!("TDP is currently {tdp}");
+                    return Ok(tdp);
+                }
+                Err(e) => {
+                    log::warn!("Failed to read current TDP using RyzenAdj: {e:?}");
+                }
+            };
+        };
+        Err(TDPError::FailedOperation(
+            "No TDP Interface available to read TDP.".into(),
+        ))
     }
 
     async fn set_tdp(&mut self, value: f64) -> TDPResult<()> {
-        log::debug!("Setting TDP to: {}", value);
-        if value < 1.0 {
-            log::warn!("Cowardly refusing to set TDP less than 1W");
-            return Err(TDPError::InvalidArgument(format!(
-                "Cowardly refusing to set TDP less than 1W: provided {}W",
-                value
-            )));
-        }
-
-        // Get the current boost value before updating the STAPM limit. We will
-        // use this value to also adjust the Fast PPT Limit.
-        let fast_ppt_limit = Tdp::get_ppt_limit_fast(self).map_err(TDPError::FailedOperation)?;
-        let mut fast_ppt_limit = fast_ppt_limit as f64;
-        let stapm_limit = Tdp::get_stapm_limit(self).map_err(TDPError::FailedOperation)?;
-        let stapm_limit = stapm_limit as f64;
-
-        // TODO: Is this a bug in ryzenadj? Sometimes fast_ppt_limit is ~0
-        if fast_ppt_limit < 1.0 {
-            log::warn!("Got a fast limit less than 1. Possible ryzenadj bug?");
-            fast_ppt_limit = stapm_limit;
-        }
-
-        let boost = fast_ppt_limit - stapm_limit;
-        log::debug!("Current boost value is: {}", boost);
-
-        // Update the STAPM limit with the TDP value
-        let limit: u32 = (value * 1000.0) as u32;
-        Tdp::set_stapm_limit(self, limit).map_err(TDPError::FailedOperation)?;
-
-        // Also update the slow PPT limit
-        Tdp::set_ppt_limit_slow(self, limit).map_err(TDPError::FailedOperation)?;
-
-        // After successfully setting the STAPM limit, we also need to adjust the
-        // Fast PPT Limit accordingly so it is *boost* distance away.
-        let fast_ppt_limit = ((value + boost) * 1000.0) as u32;
-        Tdp::set_ppt_limit_fast(self, fast_ppt_limit).map_err(TDPError::FailedOperation)?;
-
-        Ok(())
+        log::info!("Set TDP");
+        if self.asus_wmi.is_some() {
+            let asus_wmi = self.asus_wmi.as_mut().unwrap();
+            match asus_wmi.set_tdp(value).await {
+                Ok(_) => {
+                    log::info!("TDP set to {value}");
+                    return Ok(());
+                }
+                Err(e) => {
+                    log::warn!("Failed to set TDP using Asus WMI: {e:?}");
+                }
+            };
+        };
+        if self.ryzenadj.is_some() {
+            let ryzenadj = self.ryzenadj.as_mut().unwrap();
+            match ryzenadj.set_tdp(value).await {
+                Ok(_) => {
+                    log::info!("TDP set to {value}");
+                    return Ok(());
+                }
+                Err(e) => {
+                    log::warn!("Failed to set TDP using RyzenAdj: {e:?}");
+                }
+            };
+        };
+        Err(TDPError::FailedOperation(
+            "No TDP Interface available to set TDP.".into(),
+        ))
     }
 
     async fn boost(&self) -> TDPResult<f64> {
-        let fast_ppt_limit = Tdp::get_ppt_limit_fast(self).map_err(TDPError::FailedOperation)?;
-        let fast_ppt_limit = fast_ppt_limit as f64;
-        let stapm_limit = Tdp::get_stapm_limit(self).map_err(TDPError::FailedOperation)?;
-        let stapm_limit = stapm_limit as f64;
-
-        let boost = fast_ppt_limit - stapm_limit;
-
-        Ok(boost)
+        log::info!("Get TDP Boost");
+        if self.asus_wmi.is_some() {
+            let asus_wmi = self.asus_wmi.as_ref().unwrap();
+            match asus_wmi.boost().await {
+                Ok(boost) => {
+                    log::info!("Boost is currently {boost}");
+                    return Ok(boost);
+                }
+                Err(e) => {
+                    log::warn!("Failed to read current boost using Asus WMI: {e:?}");
+                }
+            };
+        };
+        if self.ryzenadj.is_some() {
+            let ryzenadj = self.ryzenadj.as_ref().unwrap();
+            match ryzenadj.boost().await {
+                Ok(boost) => {
+                    log::info!("Boost is currently {boost}");
+                    return Ok(boost);
+                }
+                Err(e) => {
+                    log::warn!("Failed to read current boost using RyzenAdj: {e:?}");
+                }
+            };
+        };
+        Err(TDPError::FailedOperation(
+            "No TDP Interface available to read boost.".into(),
+        ))
     }
 
     async fn set_boost(&mut self, value: f64) -> TDPResult<()> {
-        log::debug!("Setting boost to: {}", value);
-        if value < 0.0 {
-            log::warn!("Cowardly refusing to set TDP Boost less than 0W");
-            return Err(TDPError::InvalidArgument(format!(
-                "Cowardly refusing to set TDP Boost less than 0W: {}W provided",
-                value
-            )));
-        }
-
-        // Get the STAPM Limit so we can calculate what Fast PPT Limit to set.
-        let stapm_limit = Tdp::get_stapm_limit(self).map_err(TDPError::FailedOperation)?;
-        let stapm_limit = stapm_limit as f64;
-
-        // Set the new fast ppt limit
-        let fast_ppt_limit = ((stapm_limit + value) * 1000.0) as u32;
-        Tdp::set_ppt_limit_fast(self, fast_ppt_limit).map_err(TDPError::FailedOperation)?;
-
-        Ok(())
+        log::info!("Set TDP Boost");
+        if self.asus_wmi.is_some() {
+            let asus_wmi = self.asus_wmi.as_mut().unwrap();
+            match asus_wmi.set_boost(value).await {
+                Ok(_) => {
+                    log::info!("Boost set to {value}");
+                    return Ok(());
+                }
+                Err(e) => {
+                    log::warn!("Failed to set boost using Asus WMI: {e:?}");
+                }
+            };
+        };
+        if self.ryzenadj.is_some() {
+            let ryzenadj = self.ryzenadj.as_mut().unwrap();
+            match ryzenadj.set_boost(value).await {
+                Ok(_) => {
+                    log::info!("Boost set to {value}");
+                    return Ok(());
+                }
+                Err(e) => {
+                    log::warn!("Failed to set boost using RyzenAdj: {e:?}");
+                }
+            };
+        };
+        Err(TDPError::FailedOperation(
+            "No TDP Interface available to set boost.".into(),
+        ))
     }
 
     async fn thermal_throttle_limit_c(&self) -> TDPResult<f64> {
-        let limit =
-            Tdp::get_thm_limit(self).map_err(|err| TDPError::FailedOperation(err.to_string()))?;
-        Ok(limit.into())
+        log::info!("Get tctl limit");
+        if self.ryzenadj.is_some() {
+            let ryzenadj = self.ryzenadj.as_ref().unwrap();
+            match ryzenadj.thermal_throttle_limit_c().await {
+                Ok(limit) => {
+                    log::info!("Thermal throttle limit is currently {limit}");
+                    return Ok(limit);
+                }
+                Err(e) => {
+                    log::warn!("Failed to read thermal trottle limit using RyzenAdj: {e:?}");
+                }
+            };
+        };
+        Err(TDPError::FailedOperation(
+            "No TDP Interface available to read thermal throttle limit.".into(),
+        ))
     }
 
     async fn set_thermal_throttle_limit_c(&mut self, limit: f64) -> TDPResult<()> {
-        log::debug!("Setting thermal throttle limit to: {}", limit);
-        let limit = limit as u32;
-        Tdp::set_thm_limit(self, limit).map_err(|err| TDPError::FailedOperation(err.to_string()))
+        log::info!("Set tctl limit");
+        if self.ryzenadj.is_some() {
+            let ryzenadj = self.ryzenadj.as_mut().unwrap();
+            match ryzenadj.set_thermal_throttle_limit_c(limit).await {
+                Ok(_) => {
+                    log::info!("Thermal throttle limit was set to {:e}", limit as i32);
+                    return Ok(());
+                }
+                Err(e) => {
+                    log::warn!("Failed to set thermal trottle limit using RyzenAdj: {e:?}");
+                }
+            };
+        };
+        Err(TDPError::FailedOperation(
+            "No TDP Interface available to set thermal throttle limit.".into(),
+        ))
     }
 
     async fn power_profile(&self) -> TDPResult<String> {
-        Ok(self.profile.clone())
+        log::info!("Get power_profile");
+        if self.acpi.is_some() {
+            let acpi = self.acpi.as_ref().unwrap();
+            match acpi.power_profile().await {
+                Ok(profile) => {
+                    log::info!("Power profile is currently {profile}");
+                    return Ok(profile);
+                }
+                Err(e) => {
+                    log::warn!("Failed to read power profile using ACPI: {e:?}");
+                }
+            };
+        };
+
+        if self.ryzenadj.is_some() {
+            let ryzenadj = self.ryzenadj.as_ref().unwrap();
+            match ryzenadj.power_profile().await {
+                Ok(profile) => {
+                    log::info!("Power profile is currently {profile}");
+                    return Ok(profile);
+                }
+                Err(e) => {
+                    log::warn!("Failed to read power profile using RyzenAdj: {e:?}");
+                }
+            };
+        };
+        Err(TDPError::FailedOperation(
+            "No TDP Interface available to read power profile.".into(),
+        ))
     }
 
     async fn set_power_profile(&mut self, profile: String) -> TDPResult<()> {
-        log::debug!("Setting power profile to: {}", profile);
-        Tdp::set_power_profile(self, profile.clone())
-            .map_err(|err| TDPError::FailedOperation(err.to_string()))?;
-        self.profile = profile;
-        Ok(())
+        log::info!("Set power_profile");
+        if self.acpi.is_some() {
+            let acpi = self.acpi.as_mut().unwrap();
+            match acpi.set_power_profile(profile.clone()).await {
+                Ok(_) => {
+                    log::info!("Power profile was set to {profile}");
+                    return Ok(());
+                }
+                Err(e) => {
+                    log::warn!("Failed to set power profile using ACPI: {e:?}");
+                }
+            };
+        };
+
+        if self.ryzenadj.is_some() {
+            let ryzenadj = self.ryzenadj.as_mut().unwrap();
+            match ryzenadj.set_power_profile(profile.clone()).await {
+                Ok(_) => {
+                    log::info!("Power profile was set to {profile}");
+                    return Ok(());
+                }
+                Err(e) => {
+                    log::warn!("Failed to set power profile using RyzenAdj: {e:?}");
+                }
+            };
+        };
+        Err(TDPError::FailedOperation(
+            "No TDP Interface available to set power profile.".into(),
+        ))
+    }
+
+    async fn power_profiles_available(&self) -> TDPResult<Vec<String>> {
+        if self.acpi.is_some() {
+            let acpi = self.acpi.as_ref().unwrap();
+            match acpi.power_profiles_available().await {
+                Ok(profiles) => {
+                    log::info!("Available power profiles are {profiles:?}");
+                    return Ok(profiles);
+                }
+                Err(e) => {
+                    log::warn!("Failed to read available power profiles using ACPI: {e:?}");
+                }
+            };
+        };
+        if self.ryzenadj.is_some() {
+            let ryzenadj = self.ryzenadj.as_ref().unwrap();
+            match ryzenadj.power_profiles_available().await {
+                Ok(profiles) => {
+                    log::info!("Available power profiles are {profiles:?}");
+                    return Ok(profiles);
+                }
+                Err(e) => {
+                    log::warn!("Failed to read available power profiles using RyzenAdj: {e:?}");
+                }
+            };
+        };
+        Err(TDPError::FailedOperation(
+            "No TDP Interface available to list available power profiles.".into(),
+        ))
     }
 }

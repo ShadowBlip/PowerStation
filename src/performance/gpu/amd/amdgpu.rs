@@ -7,10 +7,12 @@ use std::{
 use tokio::sync::Mutex;
 
 use crate::constants::GPU_PATH;
-use crate::performance::gpu::amd;
-use crate::performance::gpu::dbus::devices::TDPDevices;
-use crate::performance::gpu::interface::GPUDevice;
-use crate::performance::gpu::interface::{GPUError, GPUResult};
+use crate::performance::gpu::{
+    dbus::devices::TDPDevices,
+    interface::{GPUDevice, GPUError, GPUResult},
+};
+
+use super::tdp::Tdp;
 
 #[derive(Debug, Clone)]
 pub struct AmdGpu {
@@ -36,12 +38,10 @@ impl GPUDevice for AmdGpu {
 
     /// Returns the TDP DBus interface for this GPU
     async fn get_tdp_interface(&self) -> Option<Arc<Mutex<TDPDevices>>> {
-        // if asusd is present, or asus-wmi is present this is where it is bound to the GPU
         match self.class.as_str() {
-            "integrated" => Some(Arc::new(Mutex::new(TDPDevices::Amd(amd::tdp::Tdp::new(
-                self.path.clone(),
-                self.device_id.clone(),
-            ))))),
+            "integrated" => Some(Arc::new(Mutex::new(TDPDevices::Amd(
+                Tdp::new(self.path.as_str(), self.device_id.as_str()).await,
+            )))),
             _ => None,
         }
     }

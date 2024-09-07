@@ -18,12 +18,12 @@ pciutils = "*"
 
 [dependencies]
 libryzenadj = { git = "https://gitlab.com/shadowapex/libryzenadj-rs.git" }
-#libryzenadj = "0.13.0"
 log = "0.4.20"
 simple_logger = "4.2.0"
 tokio = { version = "*", features = ["full"] }
 zbus = { version = "3.14.1", default-features = false, features = ["tokio"] }
 zbus_macros = "3.14.1"
+rog_platform = { git = "https://gitlab.com/asus-linux/asusctl.git", default-features = true }
 
 [profile.release]
 debug = false

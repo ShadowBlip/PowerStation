@@ -7,10 +7,12 @@ use std::{
 use tokio::sync::Mutex;
 
 use crate::constants::PREFIX;
-use crate::performance::gpu::dbus::devices::TDPDevices;
-use crate::performance::gpu::intel;
-use crate::performance::gpu::interface::GPUDevice;
-use crate::performance::gpu::interface::{GPUError, GPUResult};
+use crate::performance::gpu::{
+    dbus::devices::TDPDevices,
+    interface::{GPUDevice, GPUError, GPUResult},
+};
+
+use super::tdp::Tdp;
 
 #[derive(Debug, Clone)]
 pub struct IntelGPU {
@@ -38,9 +40,9 @@ impl GPUDevice for IntelGPU {
     /// Returns the TDP DBus interface for this GPU
     async fn get_tdp_interface(&self) -> Option<Arc<Mutex<TDPDevices>>> {
         match self.class.as_str() {
-            "integrated" => Some(Arc::new(Mutex::new(TDPDevices::Intel(
-                intel::tdp::Tdp::new(self.path.clone()),
-            )))),
+            "integrated" => Some(Arc::new(Mutex::new(TDPDevices::Intel(Tdp::new(
+                self.path.clone(),
+            ))))),
             _ => None,
         }
     }
