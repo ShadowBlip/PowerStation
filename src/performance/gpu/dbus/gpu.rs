@@ -7,39 +7,39 @@ use zbus_macros::dbus_interface;
 
 use tokio::sync::Mutex;
 
-use crate::performance::gpu::interface::GPUError;
+use crate::performance::gpu::amd::amdgpu::AmdGpu;
+use crate::performance::gpu::connector::Connector;
 use crate::performance::gpu::dbus::devices::GPUDevices;
 use crate::performance::gpu::dbus::tdp::GPUTDPDBusIface;
-use crate::performance::gpu::amd::amdgpu::AMDGPU;
-use crate::performance::gpu::connector::Connector;
 use crate::performance::gpu::intel::intelgpu::IntelGPU;
+use crate::performance::gpu::interface::GPUError;
 
 const DRM_PATH: &str = "/sys/class/drm";
 const PCI_IDS_PATH: &str = "/usr/share/hwdata/pci.ids";
 
-impl Into<fdo::Error> for GPUError {
-    fn into(self) -> zbus::fdo::Error {
-        match &self {
-            Self::FailedOperation(err) => fdo::Error::Failed(err.to_string()),
+impl From<GPUError> for fdo::Error {
+    fn from(val: GPUError) -> Self {
+        match &val {
+            GPUError::FailedOperation(err) => fdo::Error::Failed(err.to_string()),
             //Self::FeatureUnsupported => fdo::Error::Failed(String::from("Unsupported feature")),
-            Self::InvalidArgument(err) => fdo::Error::Failed(err.to_string()),
-            Self::IOError(err) => fdo::Error::IOError(err.to_string())
+            GPUError::InvalidArgument(err) => fdo::Error::Failed(err.to_string()),
+            GPUError::IOError(err) => fdo::Error::IOError(err.to_string()),
         }
     }
 }
 
-/// Represents the DBus for GPUs in the system 
+/// Represents the DBus for GPUs in the system
 #[derive(Clone)]
 pub struct GPUDBusInterface {
     connector_paths: Vec<String>,
-    gpu_obj: Arc<Mutex<GPUDevices>>
+    gpu_obj: Arc<Mutex<GPUDevices>>,
 }
 
 impl GPUDBusInterface {
     pub async fn new(gpu: Arc<Mutex<GPUDevices>>) -> Self {
         Self {
             gpu_obj: gpu,
-            connector_paths: vec![]
+            connector_paths: vec![],
         }
     }
 
@@ -52,24 +52,24 @@ impl GPUDBusInterface {
     }
 
     pub async fn get_tdp_interface(&self) -> Option<GPUTDPDBusIface> {
-        match self.gpu_obj.lock().await.get_tdp_interface().await {
-            Some(tdp) => Some(GPUTDPDBusIface::new(tdp)),
-            None => None
-        }
+        self.gpu_obj
+            .lock()
+            .await
+            .get_tdp_interface()
+            .await
+            .map(GPUTDPDBusIface::new)
     }
 }
 
 #[dbus_interface(name = "org.shadowblip.GPU.Card")]
 impl GPUDBusInterface {
-    
     /// Returns a list of DBus paths to all connectors
     pub fn enumerate_connectors(&self) -> fdo::Result<Vec<ObjectPath>> {
-        Ok(
-            self.connector_paths
-                .iter()
-                .map(|path| ObjectPath::from_string_unchecked(path.clone()))
-                .collect()
-        )
+        Ok(self
+            .connector_paths
+            .iter()
+            .map(|path| ObjectPath::from_string_unchecked(path.clone()))
+            .collect())
     }
 
     #[dbus_interface(property)]
@@ -134,42 +134,82 @@ impl GPUDBusInterface {
 
     #[dbus_interface(property)]
     async fn clock_limit_mhz_min(&self) -> fdo::Result<f64> {
-        self.gpu_obj.lock().await.clock_limit_mhz_min().await.map_err(|err| err.into())
+        self.gpu_obj
+            .lock()
+            .await
+            .clock_limit_mhz_min()
+            .await
+            .map_err(|err| err.into())
     }
 
     #[dbus_interface(property)]
     async fn clock_limit_mhz_max(&self) -> fdo::Result<f64> {
-        self.gpu_obj.lock().await.clock_limit_mhz_max().await.map_err(|err| err.into())
+        self.gpu_obj
+            .lock()
+            .await
+            .clock_limit_mhz_max()
+            .await
+            .map_err(|err| err.into())
     }
 
     #[dbus_interface(property)]
     async fn clock_value_mhz_min(&self) -> fdo::Result<f64> {
-        self.gpu_obj.lock().await.clock_value_mhz_min().await.map_err(|err| err.into())
+        self.gpu_obj
+            .lock()
+            .await
+            .clock_value_mhz_min()
+            .await
+            .map_err(|err| err.into())
     }
 
     #[dbus_interface(property)]
     async fn set_clock_value_mhz_min(&mut self, value: f64) -> fdo::Result<()> {
-        self.gpu_obj.lock().await.set_clock_value_mhz_min(value).await.map_err(|err| err.into())
+        self.gpu_obj
+            .lock()
+            .await
+            .set_clock_value_mhz_min(value)
+            .await
+            .map_err(|err| err.into())
     }
 
     #[dbus_interface(property)]
     async fn clock_value_mhz_max(&self) -> fdo::Result<f64> {
-        self.gpu_obj.lock().await.clock_value_mhz_max().await.map_err(|err| err.into())
+        self.gpu_obj
+            .lock()
+            .await
+            .clock_value_mhz_max()
+            .await
+            .map_err(|err| err.into())
     }
 
     #[dbus_interface(property)]
     async fn set_clock_value_mhz_max(&mut self, value: f64) -> fdo::Result<()> {
-        self.gpu_obj.lock().await.set_clock_value_mhz_max(value).await.map_err(|err| err.into())
+        self.gpu_obj
+            .lock()
+            .await
+            .set_clock_value_mhz_max(value)
+            .await
+            .map_err(|err| err.into())
     }
 
     #[dbus_interface(property)]
     async fn manual_clock(&self) -> fdo::Result<bool> {
-        self.gpu_obj.lock().await.manual_clock().await.map_err(|err| err.into())
+        self.gpu_obj
+            .lock()
+            .await
+            .manual_clock()
+            .await
+            .map_err(|err| err.into())
     }
 
     #[dbus_interface(property)]
     async fn set_manual_clock(&mut self, enabled: bool) -> fdo::Result<()> {
-        self.gpu_obj.lock().await.set_manual_clock(enabled).await.map_err(|err| err.into())
+        self.gpu_obj
+            .lock()
+            .await
+            .set_manual_clock(enabled)
+            .await
+            .map_err(|err| err.into())
     }
 }
 
@@ -198,7 +238,7 @@ impl GPUBus {
             paths.push(path);
         }
 
-        return Ok(paths);
+        Ok(paths)
     }
 }
 
@@ -220,9 +260,7 @@ pub async fn get_gpus() -> Vec<GPUDBusInterface> {
 
         log::info!("Discovered gpu: {}", file_path);
         match get_gpu(file_path).await {
-            Ok(gpu) => {
-                gpus.push(gpu)
-            },
+            Ok(gpu) => gpus.push(gpu),
             Err(err) => {
                 log::error!("Error in get_gpu: {}", err);
                 continue;
@@ -230,7 +268,7 @@ pub async fn get_gpus() -> Vec<GPUDBusInterface> {
         }
     }
 
-    return gpus;
+    gpus
 }
 
 /// Returns the GPU instance for the given path in /sys/class/drm
@@ -345,64 +383,48 @@ pub async fn get_gpu(path: String) -> Result<GPUDBusInterface, std::io::Error> {
         "AMD"
         | "AuthenticAMD"
         | "AuthenticAMD Advanced Micro Devices, Inc."
-        | "Advanced Micro Devices, Inc. [AMD/ATI]" => Ok(
-            GPUDBusInterface::new(
-                Arc::new(
-                    Mutex::new(
-                        GPUDevices::AMDGPU(
-                            AMDGPU {
-                                name: filename.to_string(),
-                                path: path.clone(),
-                                class: class.to_string(),
-                                class_id,
-                                vendor: "AMD".to_string(),
-                                vendor_id,
-                                device: device.unwrap_or("".to_string()),
-                                device_id,
-                                device_type: "".to_string(),
-                                subdevice: subdevice.unwrap_or("".to_string()),
-                                subdevice_id,
-                                subvendor_id,
-                                revision_id,
-                            }
-                        )
-                    )
-                )
-            ).await
-        ),
+        | "Advanced Micro Devices, Inc. [AMD/ATI]" => Ok(GPUDBusInterface::new(Arc::new(
+            Mutex::new(GPUDevices::AmdGpu(AmdGpu {
+                name: filename.to_string(),
+                path: path.clone(),
+                class: class.to_string(),
+                class_id,
+                vendor: "AMD".to_string(),
+                vendor_id,
+                device: device.unwrap_or("".to_string()),
+                device_id,
+                //device_type: "".to_string(),
+                subdevice: subdevice.unwrap_or("".to_string()),
+                subdevice_id,
+                subvendor_id,
+                revision_id,
+            })),
+        ))
+        .await),
         // Intel Implementation
-        "Intel" | "GenuineIntel" | "Intel Corporation" => Ok(
-            GPUDBusInterface::new(
-                Arc::new(
-                    Mutex::new(
-                        GPUDevices::INTELGPU(
-                            IntelGPU {
-                                name: filename.to_string(),
-                                path: path.clone(),
-                                class: class.to_string(),
-                                class_id,
-                                vendor: "Intel".to_string(),
-                                vendor_id,
-                                device: device.unwrap_or("".to_string()),
-                                device_id,
-                                device_type: "".to_string(),
-                                subdevice: subdevice.unwrap_or("".to_string()),
-                                subdevice_id,
-                                subvendor_id,
-                                revision_id,
-                                manual_clock: true,
-                            }
-                        )
-                    )
-                )
-            ).await
-        ),
-        _ => {
-            Err(std::io::Error::new(
-                std::io::ErrorKind::Unsupported,
-                "Unsupported vendor",
-            ))
-        }
+        "Intel" | "GenuineIntel" | "Intel Corporation" => Ok(GPUDBusInterface::new(Arc::new(
+            Mutex::new(GPUDevices::IntelGpu(IntelGPU {
+                name: filename.to_string(),
+                path: path.clone(),
+                class: class.to_string(),
+                class_id,
+                vendor: "Intel".to_string(),
+                vendor_id,
+                device: device.unwrap_or("".to_string()),
+                device_id,
+                //device_type: "".to_string(),
+                subdevice: subdevice.unwrap_or("".to_string()),
+                subdevice_id,
+                subvendor_id,
+                revision_id,
+                manual_clock: true,
+            })),
+        ))
+        .await),
+        _ => Err(std::io::Error::new(
+            std::io::ErrorKind::Unsupported,
+            "Unsupported vendor",
+        )),
     }
 }
 
@@ -411,10 +433,10 @@ pub fn get_connector(gpu_name: String, path: String) -> Connector {
     let prefix = format!("{}-", &gpu_name);
     let name = path.trim_start_matches(&prefix);
 
-    return Connector {
+    Connector {
         name: name.to_string(),
         path: format!("{0}/{1}", DRM_PATH, path),
-    };
+    }
 }
 
 /// Returns a list of [Connector] instances for the given graphics card name.
@@ -440,5 +462,5 @@ pub fn get_connectors(gpu_name: String) -> Vec<Connector> {
     }
 
     log::debug!("Finished finding connectors");
-    return connectors;
+    connectors
 }

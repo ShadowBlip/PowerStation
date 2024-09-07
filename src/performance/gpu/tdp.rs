@@ -5,15 +5,15 @@ pub enum TDPError {
     IOError(String),
 }
 
-impl Into<String> for TDPError {
-    fn into(self) -> std::string::String {
+impl From<TDPError> for String {
+    fn from(val: TDPError) -> Self {
         todo!()
     }
 }
 
 pub type TDPResult<T> = Result<T, TDPError>;
 
-pub trait TDPDevice : Sync + Send {
+pub trait TDPDevice: Sync + Send {
     async fn tdp(&self) -> TDPResult<f64>;
     async fn set_tdp(&mut self, value: f64) -> TDPResult<()>;
     async fn boost(&self) -> TDPResult<f64>;
@@ -23,3 +23,4 @@ pub trait TDPDevice : Sync + Send {
     async fn power_profile(&self) -> TDPResult<String>;
     async fn set_power_profile(&mut self, profile: String) -> TDPResult<()>;
 }
+

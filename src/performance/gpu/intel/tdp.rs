@@ -4,17 +4,17 @@ use std::io::Write;
 use crate::performance::gpu::tdp::{TDPDevice, TDPError, TDPResult};
 
 /// Implementation of TDP control for Intel GPUs
-pub struct TDP {
-    pub path: String,
+pub struct Tdp {
+    //pub path: String,
 }
 
-impl TDP {
-    pub fn new(path: String) -> TDP {
-        TDP { path }
+impl Tdp {
+    pub fn new(_path: String) -> Tdp {
+        Tdp {} //path }
     }
 }
 
-impl TDPDevice for TDP {
+impl TDPDevice for Tdp {
     async fn tdp(&self) -> TDPResult<f64> {
         let path = "/sys/class/powercap/intel-rapl/intel-rapl:0/constraint_0_power_limit_uw";
         let result = fs::read_to_string(path);
@@ -51,20 +51,18 @@ impl TDPDevice for TDP {
         let value = format!("{}", value * 1000000.0);
 
         // Write the value
-        file
-            .map_err(|err| TDPError::FailedOperation(err.to_string()))?
+        file.map_err(|err| TDPError::FailedOperation(err.to_string()))?
             .write_all(value.as_bytes())
             .map_err(|err| TDPError::IOError(err.to_string()))?;
 
         // Update the boost value
-        Ok(self.set_boost(boost).await?)
+        self.set_boost(boost).await
     }
 
     async fn boost(&self) -> TDPResult<f64> {
         let path = "/sys/class/powercap/intel-rapl/intel-rapl:0/constraint_2_power_limit_uw";
         let result = fs::read_to_string(path);
-        let content = result
-            .map_err(|err| TDPError::IOError(err.to_string()))?;
+        let content = result.map_err(|err| TDPError::IOError(err.to_string()))?;
 
         // Parse the output to get the peak TDP
         let peak_tdp = match content.parse::<f64>() {
@@ -87,7 +85,7 @@ impl TDPDevice for TDP {
         }
 
         let tdp = self.tdp().await?;
-        let boost = value.clone();
+        let boost = value;
         let short_tdp = if boost > 0.0 {
             ((boost / 2.0) + tdp) * 1000000.0
         } else {
@@ -98,8 +96,7 @@ impl TDPDevice for TDP {
         let path = "/sys/class/powercap/intel-rapl/intel-rapl:0/constraint_1_power_limit_uw";
         let file = OpenOptions::new().write(true).open(path);
         let value = format!("{}", short_tdp);
-        file
-            .map_err(|err| TDPError::FailedOperation(err.to_string()))?
+        file.map_err(|err| TDPError::FailedOperation(err.to_string()))?
             .write_all(value.as_bytes())
             .map_err(|err| TDPError::IOError(err.to_string()))?;
 
@@ -107,8 +104,7 @@ impl TDPDevice for TDP {
         let path = "/sys/class/powercap/intel-rapl/intel-rapl:0/constraint_2_power_limit_uw";
         let file = OpenOptions::new().write(true).open(path);
         let value = format!("{}", (boost + tdp) * 1000000.0);
-        file
-            .map_err(|err| TDPError::FailedOperation(err.to_string()))?
+        file.map_err(|err| TDPError::FailedOperation(err.to_string()))?
             .write_all(value.as_bytes())
             .map_err(|err| TDPError::IOError(err.to_string()))
     }
