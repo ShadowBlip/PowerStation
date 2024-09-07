@@ -12,7 +12,7 @@ pub enum GPUError {
 }
 
 impl From<GPUError> for String {
-    fn from(val: GPUError) -> Self {
+    fn from(_val: GPUError) -> Self {
         todo!()
     }
 }
@@ -22,9 +22,7 @@ pub type GPUResult<T> = Result<T, GPUError>;
 /// Represents the data contained in /sys/class/drm/cardX
 pub trait GPUDevice: Send + Sync {
     async fn get_tdp_interface(&self) -> Option<Arc<Mutex<TDPDevices>>>;
-
     async fn get_gpu_path(&self) -> String;
-
     async fn name(&self) -> String;
     async fn path(&self) -> String;
     async fn class(&self) -> String;

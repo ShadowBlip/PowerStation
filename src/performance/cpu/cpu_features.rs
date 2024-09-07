@@ -14,14 +14,14 @@ const SMT_PATH: &str = "/sys/devices/system/cpu/smt/control";
 const BOOST_PATH: &str = "/sys/devices/system/cpu/cpufreq/boost";
 
 // Instance of the CPU on the host machine
-pub struct CPU {
+pub struct Cpu {
     core_map: HashMap<u32, Vec<CPUCore>>,
     core_count: u32,
 }
 
-impl CPU {
+impl Cpu {
     // Returns a new CPU instance
-    pub fn new() -> CPU {
+    pub fn new() -> Cpu {
         // Create a hashmap to organize the cores by their core ID
         let mut core_map: HashMap<u32, Vec<CPUCore>> = HashMap::new();
         let mut cores = get_cores();
@@ -40,17 +40,17 @@ impl CPU {
         for core in cores {
             core_count += 1;
             let core_id = core.core_id().unwrap();
-            if core_map.get(&core_id).is_none() {
+            core_map.entry(core_id).or_insert_with(|| {
                 let list: Vec<CPUCore> = Vec::new();
-                core_map.insert(core_id, list);
-            }
+                list
+            });
 
             let list = core_map.get_mut(&core_id).unwrap();
             list.push(core);
         }
         log::info!("Core Map: {:?}", core_map);
 
-        CPU {
+        Cpu {
             core_map,
             core_count,
         }
@@ -58,7 +58,7 @@ impl CPU {
 }
 
 #[dbus_interface(name = "org.shadowblip.CPU")]
-impl CPU {
+impl Cpu {
     // Returns whether or not boost is enabled
     #[dbus_interface(property)]
     pub async fn boost_enabled(&self) -> fdo::Result<bool> {
@@ -142,7 +142,7 @@ impl CPU {
     /// Returns the total number of CPU cores detected
     #[dbus_interface(property)]
     pub async fn cores_count(&self) -> fdo::Result<u32> {
-        Ok(self.core_count.clone())
+        Ok(self.core_count)
     }
 
     #[dbus_interface(property)]
@@ -286,13 +286,11 @@ async fn get_features() -> fdo::Result<Vec<String>> {
 pub fn get_cores() -> Vec<CPUCore> {
     let mut cores: Vec<CPUCore> = Vec::new();
     let paths = std::fs::read_dir(CPUID_PATH).unwrap();
-    let mut i = 0;
-    for path in paths {
+    for (i, path) in paths.enumerate() {
         log::info!("Discovered core: {}", path.unwrap().path().display());
         let core_path = format!("/sys/bus/cpu/devices/cpu{0}", i);
-        let core = CPUCore::new(i, core_path);
+        let core = CPUCore::new(i as u32, core_path);
         cores.push(core);
-        i += 1;
     }
 
     cores

@@ -1,2 +1,2 @@
 pub mod core;
-pub mod cpu;
+pub mod cpu_features;

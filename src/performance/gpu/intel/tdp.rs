@@ -128,4 +128,9 @@ impl TDPDevice for Tdp {
         log::error!("Power profiles not supported on intel gpu");
         Err(TDPError::FeatureUnsupported)
     }
+
+    async fn power_profiles_available(&self) -> TDPResult<Vec<String>> {
+        log::error!("Power profiles not supported on intel gpu");
+        Err(TDPError::FeatureUnsupported)
+    }
 }
