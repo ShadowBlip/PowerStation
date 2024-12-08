@@ -106,7 +106,7 @@ impl GPUTDPDBusIface {
     }
 
     #[dbus_interface(property)]
-    async fn power_profiles_avaialable(&self) -> fdo::Result<Vec<String>> {
+    async fn power_profiles_available(&self) -> fdo::Result<Vec<String>> {
         match self.dev.lock().await.power_profiles_available().await {
             TDPResult::Ok(result) => Ok(result),
             TDPResult::Err(err) => Err(err.into()),
