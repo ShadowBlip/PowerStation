@@ -1,5 +1,6 @@
 use std::fs::{self, File};
 use std::io::{prelude::*, BufReader};
+use std::path::PathBuf;
 use std::sync::Arc;
 use zbus::fdo;
 use zbus::zvariant::ObjectPath;
@@ -301,7 +302,7 @@ pub async fn get_gpu(path: String) -> Result<GPUDBusInterface, std::io::Error> {
         .to_lowercase();
 
     // Open the file that contains hardware ID mappings
-    let hw_ids_file = File::open(PCI_IDS_PATH)?;
+    let hw_ids_file = File::open(get_pci_ids_path())?;
     let reader = BufReader::new(hw_ids_file);
 
     // Set the class based on class ID
@@ -463,4 +464,25 @@ pub fn get_connectors(gpu_name: String) -> Vec<Connector> {
 
     log::debug!("Finished finding connectors");
     connectors
+}
+
+/// Returns the path to the PCI id's file from hwdata
+fn get_pci_ids_path() -> PathBuf {
+    let Ok(base_dirs) = xdg::BaseDirectories::with_prefix("hwdata") else {
+        log::warn!("Unable to determine config base path. Using fallback path.");
+        return PathBuf::from(PCI_IDS_PATH);
+    };
+
+    // Get the data directories in preference order
+    let data_dirs = base_dirs.get_data_dirs();
+    for dir in data_dirs {
+        if dir.exists() {
+            let mut path = dir.into_os_string();
+            path.push("/pci.ids");
+            return path.into();
+        }
+    }
+
+    log::warn!("Config base path not found. Using fallback path.");
+    PathBuf::from(PCI_IDS_PATH)
 }

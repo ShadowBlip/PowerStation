@@ -24,6 +24,7 @@ tokio = { version = "*", features = ["full"] }
 zbus = { version = "3.14.1", default-features = false, features = ["tokio"] }
 zbus_macros = "3.14.1"
 rog_platform = { git = "https://gitlab.com/asus-linux/asusctl.git", default-features = true }
+xdg = "2.5.2"
 
 [profile.release]
 debug = false
