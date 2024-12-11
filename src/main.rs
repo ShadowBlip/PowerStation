@@ -1,5 +1,7 @@
+use constants::PREFIX;
 use simple_logger::SimpleLogger;
 use std::{error::Error, future::pending};
+use zbus::fdo::ObjectManager;
 use zbus::Connection;
 
 use crate::constants::{BUS_NAME, CPU_PATH, GPU_PATH};
@@ -21,6 +23,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Configure the connection
     let connection = Connection::system().await?;
+
+    // Create an ObjectManager to signal when objects are added/removed
+    let object_manager = ObjectManager {};
+    let object_manager_path = String::from(PREFIX);
+    connection
+        .object_server()
+        .at(object_manager_path, object_manager)
+        .await?;
 
     // Generate CPU objects to serve
     connection.object_server().at(CPU_PATH, cpu).await?;
