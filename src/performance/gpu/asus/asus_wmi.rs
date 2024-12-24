@@ -15,7 +15,7 @@ impl From<PlatformError> for TDPError {
 /// Implementation of asus-wmi sysfs
 /// See https://www.kernel.org/doc/html/v6.8-rc4/admin-guide/abi-testing.html#abi-sys-devices-platform-platform-ppt-apu-sppt
 pub struct AsusWmi {
-    attributes: Option<FirmwareAttributes>,
+    attributes: FirmwareAttributes,
     platform: RogPlatform,
 }
 
@@ -25,7 +25,7 @@ impl AsusWmi {
         match RogPlatform::new() {
             Ok(platform) => {
                 log::info!("Module asus-wmi found");
-                let attributes: Option<FirmwareAttributes> = Some(FirmwareAttributes::new());
+                let attributes = FirmwareAttributes::new();
                 Some(Self {
                     attributes,
                     platform,
@@ -40,23 +40,24 @@ impl AsusWmi {
 
     /// Returns the currently set STAPM value
     pub async fn tdp(&self) -> TDPResult<f64> {
-        if let Some(firmware_attributes) = &self.attributes {
-            match firmware_attributes
-                .attributes()
-                .iter()
-                .find(|a| a.name() == "ppt_pl1_spl")
-            {
-                Some(attribute) => match attribute.current_value() {
-                    Ok(attr_value) => match attr_value {
-                        AttrValue::Integer(value) => Ok(value as f64),
-                        _ => Err(TDPError::FailedOperation("Failed to read SPL.".to_string())),
-                    },
-                    Err(_) => Err(TDPError::FailedOperation("Failed to read SPL.".to_string())),
-                },
-                None => Err(TDPError::FailedOperation("Failed to read SPL.".to_string())),
+        let attr = self
+            .attributes
+            .attributes()
+            .iter()
+            .find(|a| a.name() == "ppt_pl1_spl");
+        let Some(attr) = attr else {
+            return Ok(self.platform.get_ppt_pl1_spl()? as f64);
+        };
+
+        match attr.current_value() {
+            Ok(attr_value) => match attr_value {
+                AttrValue::Integer(value) => Ok(value as f64),
+                _ => Err(TDPError::FailedOperation("Failed to read SPL.".to_string())),
+            },
+            Err(e) => {
+                let err = format!("Failed to read SPL: {e:?}");
+                Err(TDPError::FailedOperation(err))
             }
-        } else {
-            Ok(self.platform.get_ppt_pl1_spl()? as f64)
         }
     }
 
@@ -73,31 +74,29 @@ impl AsusWmi {
         let boost = self.boost().await?;
 
         // Set the STAPM value to the given TDP value
-        let val = AttrValue::Integer(value as i32);
-        if let Some(firmware_attributes) = &self.attributes {
-            match firmware_attributes
-                .attributes()
-                .iter()
-                .find(|a| a.name() == "ppt_pl1_spl")
-            {
-                Some(attribute) => match attribute.set_current_value(val) {
-                    Ok(_) => {
-                        log::info!("Set SPL to {value}");
-                    }
-                    Err(e) => {
-                        return Err(TDPError::FailedOperation(format!(
-                            "Failed to set SPL: {e:}"
-                        )));
-                    }
-                },
+        let attr = self
+            .attributes
+            .attributes()
+            .iter()
+            .find(|a| a.name() == "ppt_pl1_spl");
 
-                None => return Err(TDPError::FailedOperation("Failed to set SPL.".to_string())),
+        if let Some(attr) = attr {
+            let val = AttrValue::Integer(value as i32);
+            match attr.set_current_value(val) {
+                Ok(_) => {
+                    log::info!("Set SPL to {value}");
+                }
+                Err(e) => {
+                    return Err(TDPError::FailedOperation(format!(
+                        "Failed to set SPL: {e:?}"
+                    )));
+                }
             }
         } else {
             self.platform.set_ppt_pl1_spl(value as u8)?;
         }
 
-        // Set the boost back to the expeted value with the new TDP
+        // Set the boost back to the expected value with the new TDP
         self.set_boost(boost).await?;
 
         Ok(())
@@ -112,13 +111,15 @@ impl AsusWmi {
             }
         };
 
-        let slow_ppt = if let Some(firmware_attributes) = &self.attributes {
-            match firmware_attributes
-                .attributes()
-                .iter()
-                .find(|a| a.name() == "ppt_platform_sppt")
-            {
-                Some(attribute) => match attribute.current_value() {
+        let attr = self
+            .attributes
+            .attributes()
+            .iter()
+            .find(|a| a.name() == "ppt_platform_sppt");
+
+        let slow_ppt = {
+            if let Some(attr) = attr {
+                match attr.current_value() {
                     Ok(attr_value) => match attr_value {
                         AttrValue::Integer(value) => value as f64,
                         _ => {
@@ -132,15 +133,11 @@ impl AsusWmi {
                             "Failed to read SPPT.".to_string(),
                         ))
                     }
-                },
-                None => {
-                    return Err(TDPError::FailedOperation(
-                        "Failed to read SPPT.".to_string(),
-                    ))
                 }
+                //
+            } else {
+                self.platform.get_ppt_platform_sppt()? as f64
             }
-        } else {
-            self.platform.get_ppt_platform_sppt()? as f64
         };
 
         let boost = slow_ppt - stapm;
@@ -156,32 +153,33 @@ impl AsusWmi {
                 return Err(e);
             }
         };
-
+        if (stapm + value) < 1.0 || (stapm + value) > u8::MAX as f64 {
+            return Err(TDPError::InvalidArgument(
+                "Combined TDP + Boost value must be between 1 and 255".to_string(),
+            ));
+        }
         let sppt_val = (stapm + value) as i32;
-        let boost = AttrValue::Integer(sppt_val);
 
         // ppt_platform_sppt will set sppt to value and fppt to value + 25%
-        if let Some(firmware_attributes) = &self.attributes {
-            match firmware_attributes
-                .attributes()
-                .iter()
-                .find(|a| a.name() == "ppt_platform_sppt")
-            {
-                Some(attribute) => match attribute.set_current_value(boost) {
-                    Ok(_) => {
-                        log::info!("Set SPPT to {value}");
-                    }
-                    Err(e) => {
-                        return Err(TDPError::FailedOperation(format!(
-                            "Failed to set SPPT: {e:}"
-                        )));
-                    }
-                },
+        let attr = self
+            .attributes
+            .attributes()
+            .iter()
+            .find(|a| a.name() == "ppt_platform_sppt");
+        let Some(attr) = attr else {
+            return Ok(self.platform.set_ppt_platform_sppt(sppt_val as u8)?);
+        };
 
-                None => return Err(TDPError::FailedOperation("Failed to set SPPT.".to_string())),
+        let boost = AttrValue::Integer(sppt_val);
+        match attr.set_current_value(boost) {
+            Ok(_) => {
+                log::info!("Set SPPT to {value}");
             }
-        } else {
-            self.platform.set_ppt_platform_sppt(sppt_val as u8)?;
+            Err(e) => {
+                return Err(TDPError::FailedOperation(format!(
+                    "Failed to set SPPT: {e:?}"
+                )));
+            }
         }
 
         Ok(())
