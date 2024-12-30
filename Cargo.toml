@@ -17,7 +17,6 @@ dbus = "*"
 pciutils = "*"
 
 [dependencies]
-libryzenadj = { git = "https://gitlab.com/shadowapex/libryzenadj-rs.git" }
 log = "0.4.20"
 simple_logger = "4.2.0"
 tokio = { version = "*", features = ["full"] }
@@ -25,6 +24,9 @@ zbus = { version = "3.14.1", default-features = false, features = ["tokio"] }
 zbus_macros = "3.14.1"
 rog_platform = { git = "https://gitlab.com/asus-linux/asusctl.git", default-features = true }
 xdg = "2.5.2"
+
+[target.'cfg(target_arch = "x86_64")'.dependencies]
+libryzenadj = { git = "https://gitlab.com/shadowapex/libryzenadj-rs.git" }
 
 [profile.release]
 debug = false

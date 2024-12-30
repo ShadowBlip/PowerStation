@@ -4,12 +4,14 @@ use crate::performance::gpu::{
     tdp::{TDPDevice, TDPError, TDPResult},
 };
 
+#[cfg(target_arch = "x86_64")]
 use super::ryzenadj::RyzenAdjTdp;
 
 /// Implementation of TDP control for AMD GPUs
 pub struct Tdp {
     asus_wmi: Option<AsusWmi>,
     acpi: Option<Acpi>,
+    #[cfg(target_arch = "x86_64")]
     ryzenadj: Option<RyzenAdjTdp>,
 }
 
@@ -31,6 +33,7 @@ impl Tdp {
             None => None,
         };
 
+        #[cfg(target_arch = "x86_64")]
         let ryzenadj = match RyzenAdjTdp::new(path.to_string(), device_id.to_string()) {
             Ok(ryzenadj) => {
                 log::info!("Found RyzenAdj interface for TDP control");
@@ -45,6 +48,7 @@ impl Tdp {
         Tdp {
             asus_wmi,
             acpi,
+            #[cfg(target_arch = "x86_64")]
             ryzenadj,
         }
     }
@@ -68,6 +72,7 @@ impl TDPDevice for Tdp {
             };
         };
         // TODO: set platform profile based on % of max TDP.
+        #[cfg(target_arch = "x86_64")]
         if self.ryzenadj.is_some() {
             let ryzenadj = self.ryzenadj.as_ref().unwrap();
             match ryzenadj.tdp().await {
@@ -99,6 +104,7 @@ impl TDPDevice for Tdp {
                 }
             };
         };
+        #[cfg(target_arch = "x86_64")]
         if self.ryzenadj.is_some() {
             let ryzenadj = self.ryzenadj.as_mut().unwrap();
             match ryzenadj.set_tdp(value).await {
@@ -130,6 +136,7 @@ impl TDPDevice for Tdp {
                 }
             };
         };
+        #[cfg(target_arch = "x86_64")]
         if self.ryzenadj.is_some() {
             let ryzenadj = self.ryzenadj.as_ref().unwrap();
             match ryzenadj.boost().await {
@@ -161,6 +168,7 @@ impl TDPDevice for Tdp {
                 }
             };
         };
+        #[cfg(target_arch = "x86_64")]
         if self.ryzenadj.is_some() {
             let ryzenadj = self.ryzenadj.as_mut().unwrap();
             match ryzenadj.set_boost(value).await {
@@ -180,6 +188,7 @@ impl TDPDevice for Tdp {
 
     async fn thermal_throttle_limit_c(&self) -> TDPResult<f64> {
         log::info!("Get tctl limit");
+        #[cfg(target_arch = "x86_64")]
         if self.ryzenadj.is_some() {
             let ryzenadj = self.ryzenadj.as_ref().unwrap();
             match ryzenadj.thermal_throttle_limit_c().await {
@@ -199,6 +208,7 @@ impl TDPDevice for Tdp {
 
     async fn set_thermal_throttle_limit_c(&mut self, limit: f64) -> TDPResult<()> {
         log::info!("Set tctl limit");
+        #[cfg(target_arch = "x86_64")]
         if self.ryzenadj.is_some() {
             let ryzenadj = self.ryzenadj.as_mut().unwrap();
             match ryzenadj.set_thermal_throttle_limit_c(limit).await {
@@ -231,6 +241,7 @@ impl TDPDevice for Tdp {
             };
         };
 
+        #[cfg(target_arch = "x86_64")]
         if self.ryzenadj.is_some() {
             let ryzenadj = self.ryzenadj.as_ref().unwrap();
             match ryzenadj.power_profile().await {
@@ -263,6 +274,7 @@ impl TDPDevice for Tdp {
             };
         };
 
+        #[cfg(target_arch = "x86_64")]
         if self.ryzenadj.is_some() {
             let ryzenadj = self.ryzenadj.as_mut().unwrap();
             match ryzenadj.set_power_profile(profile.clone()).await {
@@ -293,6 +305,7 @@ impl TDPDevice for Tdp {
                 }
             };
         };
+        #[cfg(target_arch = "x86_64")]
         if self.ryzenadj.is_some() {
             let ryzenadj = self.ryzenadj.as_ref().unwrap();
             match ryzenadj.power_profiles_available().await {
