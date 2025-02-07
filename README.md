@@ -7,7 +7,7 @@
 <p align="center">
   <a href="https://github.com/ShadowBlip/PowerStation/stargazers"><img src="https://img.shields.io/github/stars/ShadowBlip/PowerStation" /></a>
   <a href="https://github.com/ShadowBlip/PowerStation/blob/main/LICENSE"><img src="https://img.shields.io/github/license/ShadowBlip/PowerStation" /></a>
-  <a href="https://discord.gg/fKsUbrt"><img src="https://img.shields.io/badge/discord-server-%235865F2" /></a>
+  <a href="https://discord.gg/Ea9ABXhtkv"><img alt="Discord" src="https://img.shields.io/discord/721211671124770837?label=discord" /></a>
   <br>
 </p>
 
