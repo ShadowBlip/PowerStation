@@ -79,6 +79,11 @@ impl RyzenAdjTdp {
     // Get the PPT slow limit
     fn get_ppt_limit_slow(&self) -> Result<f32, String> {
         log::debug!("Getting ppt slow limit");
+        
+        if let Err(e) = self.ryzenadj.refresh() {
+            log::error!("Failed to refresh ryzenadj: {}", e);
+        }
+
         match self.ryzenadj.get_slow_limit() {
             Ok(x) => Ok(x),
             Err(e) => {
@@ -116,6 +121,10 @@ impl RyzenAdjTdp {
         // attribute.
         if self.is_unsupported_gpu() {
             return Ok(self.unsupported_ppt_limit_fast);
+        }
+
+        if let Err(e) = self.ryzenadj.refresh() {
+            log::error!("Failed to refresh ryzenadj: {}", e);
         }
 
         // Get the fast limit from ryzenadj
@@ -162,6 +171,10 @@ impl RyzenAdjTdp {
             return Ok(self.unsupported_stapm_limit);
         }
 
+        if let Err(e) = self.ryzenadj.refresh() {
+            log::error!("Failed to refresh ryzenadj: {}", e);
+        }
+
         // Get the value from ryzenadj
         match self.ryzenadj.get_stapm_limit() {
             Ok(x) => {
@@ -204,6 +217,10 @@ impl RyzenAdjTdp {
         // attribute.
         if self.is_unsupported_gpu() {
             return Ok(self.unsupported_thm_limit);
+        }
+
+        if let Err(e) = self.ryzenadj.refresh() {
+            log::error!("Failed to refresh ryzenadj: {}", e);
         }
 
         // Get the value from ryzenadj
