@@ -33,7 +33,9 @@ plugins:
   # Execute commands to build the project
   - - "@semantic-release/exec"
     - shell: true
-      prepareCmd: "make in-docker TARGET='dist'"
+      prepareCmd: |
+        make in-docker TARGET='dist'
+        make in-docker TARGET='dist' TARGET_ARCH="aarch64-unknown-linux-gnu"
 
   # Commit the following changes to git after other plugins have run
   - - "@semantic-release/git"
@@ -46,5 +48,5 @@ plugins:
     - assets:
         - path: dist/powerstation-*.rpm
         - path: dist/powerstation-*.rpm.sha256.txt
-        - path: dist/powerstation.tar.gz
-        - path: dist/powerstation.tar.gz.sha256.txt
+        - path: dist/powerstation-*.tar.gz
+        - path: dist/powerstation-*.tar.gz.sha256.txt

@@ -1,6 +1,7 @@
 NAME := $(shell grep 'name =' Cargo.toml | head -n 1 | cut -d'"' -f2)
 VERSION := $(shell grep '^version =' Cargo.toml | cut -d'"' -f2)
-ARCH := $(shell uname -m)
+TARGET_ARCH ?= $(shell rustc -vV | sed -n 's/host: //p')
+ARCH := $(shell echo "$(TARGET_ARCH)" | cut -d'-' -f1)
 ALL_RS := $(shell find src -name '*.rs')
 PREFIX ?= /usr
 CACHE_DIR := .cache
@@ -28,7 +29,7 @@ help: ## Display this help.
 
 .PHONY: install
 install: build ## Install PowerStation to the given prefix (default: PREFIX=/usr)
-	install -D -m 755 target/release/powerstation \
+	install -D -m 755 target/$(TARGET_ARCH)/release/powerstation \
 		$(PREFIX)/bin/powerstation
 	install -D -m 644 rootfs/usr/share/dbus-1/system.d/org.shadowblip.PowerStation.conf \
 		$(PREFIX)/share/dbus-1/system.d/org.shadowblip.PowerStation.conf
@@ -47,21 +48,21 @@ uninstall: ## Uninstall PowerStation
 ##@ Development
 
 .PHONY: debug
-debug: target/debug/powerstation  ## Build debug build
-target/debug/powerstation: $(ALL_RS) Cargo.lock
-	cargo build
+debug: target/$(TARGET_ARCH)/debug/powerstation  ## Build debug build
+target/$(TARGET_ARCH)/debug/powerstation: $(ALL_RS) Cargo.lock
+	cargo build --target $(TARGET_ARCH)
 
 .PHONY: build
-build: target/release/powerstation ## Build release build
-target/release/powerstation: $(ALL_RS) Cargo.lock
-	cargo build --release
+build: target/$(TARGET_ARCH)/release/powerstation ## Build release build
+target/$(TARGET_ARCH)/release/powerstation: $(ALL_RS) Cargo.lock
+	cargo build --release --target $(TARGET_ARCH)
 
 .PHONY: all
 all: build debug ## Build release and debug builds
 
 .PHONY: run
 run: setup debug ## Build and run
-	sudo ./target/debug/powerstation
+	sudo ./target/$(TARGET_ARCH)/debug/powerstation
 
 .PHONY: test
 test: debug ## Build and run all tests
@@ -87,25 +88,25 @@ setup: /usr/share/dbus-1/system.d/org.shadowblip.PowerStation.conf ## Install db
 ##@ Distribution
 
 .PHONY: dist
-dist: dist/$(NAME).tar.gz dist/$(NAME)-$(VERSION)-1.$(ARCH).rpm ## Create all redistributable versions of the project
+dist: dist/$(NAME)-$(ARCH).tar.gz dist/$(NAME)-$(VERSION)-1.$(ARCH).rpm ## Create all redistributable versions of the project
 
 .PHONY: dist-archive
-dist-archive: dist/powerstation.tar.gz ## Build a redistributable archive of the project
-dist/powerstation.tar.gz: build
+dist-archive: dist/powerstation-$(ARCH).tar.gz ## Build a redistributable archive of the project
+dist/powerstation-$(ARCH).tar.gz: build
 	rm -rf $(CACHE_DIR)/powerstation
 	mkdir -p $(CACHE_DIR)/powerstation
 	$(MAKE) install PREFIX=$(CACHE_DIR)/powerstation/usr NO_RELOAD=true
 	mkdir -p dist
 	tar cvfz $@ -C $(CACHE_DIR) powerstation
-	cd dist && sha256sum powerstation.tar.gz > powerstation.tar.gz.sha256.txt
+	cd dist && sha256sum powerstation-$(ARCH).tar.gz > powerstation-$(ARCH).tar.gz.sha256.txt
 
 .PHONY: dist-rpm
 dist-rpm: dist/$(NAME)-$(VERSION)-1.$(ARCH).rpm ## Build a redistributable RPM package
-dist/$(NAME)-$(VERSION)-1.$(ARCH).rpm: target/release/$(NAME)
+dist/$(NAME)-$(VERSION)-1.$(ARCH).rpm: target/$(TARGET_ARCH)/release/$(NAME)
 	mkdir -p dist
 	cargo install cargo-generate-rpm
-	cargo generate-rpm
-	cp ./target/generate-rpm/$(NAME)-$(VERSION)-1.$(ARCH).rpm dist
+	cargo generate-rpm --target $(TARGET_ARCH)
+	cp ./target/$(TARGET_ARCH)/generate-rpm/$(NAME)-$(VERSION)-1.$(ARCH).rpm dist
 	cd dist && sha256sum $(NAME)-$(VERSION)-1.$(ARCH).rpm > $(NAME)-$(VERSION)-1.$(ARCH).rpm.sha256.txt
 
 INTROSPECT_CARD ?= Card2
@@ -166,6 +167,8 @@ in-docker: docker-builder
 		-v $(PWD):/src \
 		--workdir /src \
 		-e HOME=/home/build \
+		-e TARGET_ARCH=$(TARGET_ARCH) \
+		-e PKG_CONFIG_SYSROOT_DIR="/usr/$(ARCH)-linux-gnu" \
 		--user $(shell id -u):$(shell id -g) \
 		$(IMAGE_NAME):$(IMAGE_TAG) \
 		make $(TARGET)
