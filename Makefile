@@ -35,7 +35,7 @@ install: build ## Install PowerStation to the given prefix (default: PREFIX=/usr
 		$(PREFIX)/share/dbus-1/system.d/org.shadowblip.PowerStation.conf
 	install -D -m 644 rootfs/usr/lib/systemd/system/powerstation.service \
 		$(PREFIX)/lib/systemd/system/powerstation.service
-	install -D -m644 -t $(PREFIX)/usr/share/powerstation/platform/ \
+	install -D -m644 -t $(PREFIX)/share/powerstation/platform/ \
 		rootfs/usr/share/powerstation/platform/*
 ifndef NO_RELOAD
 	systemctl reload dbus
