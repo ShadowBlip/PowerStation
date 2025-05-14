@@ -33,3 +33,10 @@ model_name = "ROG Ally X RC72LA_RC72LA"
 min_tdp = 8.0
 max_tdp = 30.0
 max_boost = 10.0
+
+
+[[models]]
+model_name = "G1617-01"
+min_tdp = 5.0
+max_tdp = 28.0
+max_boost = 0.0
