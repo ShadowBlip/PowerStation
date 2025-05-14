@@ -64,7 +64,11 @@ impl TDPDevice for Tdp {
 
         // Get the current boost value so the peak tdp can be set *boost*
         // distance away.
-        let boost = self.boost().await?;
+        let mut boost = self.boost().await?;
+        if boost < 0.0 {
+            log::warn!("Boost is less than 0, setting to 0");
+            boost = 0.0;
+        }
 
         // Open the sysfs file to write to
         let path = "/sys/class/powercap/intel-rapl/intel-rapl:0/constraint_0_power_limit_uw";
@@ -83,7 +87,7 @@ impl TDPDevice for Tdp {
     }
 
     async fn boost(&self) -> TDPResult<f64> {
-        let path = "/sys/class/powercap/intel-rapl/intel-rapl:0/constraint_2_power_limit_uw";
+        let path = "/sys/class/powercap/intel-rapl/intel-rapl:0/constraint_1_power_limit_uw";
         let result = fs::read_to_string(path);
         let content = result.map_err(|err| TDPError::IOError(err.to_string()))?;
         let content = content.trim();
@@ -102,6 +106,7 @@ impl TDPDevice for Tdp {
     }
 
     async fn set_boost(&mut self, value: f64) -> TDPResult<()> {
+        log::debug!("Setting Boost: {}", value);
         if value < 0.0 {
             let err = "Cowardly refusing to set TDP Boost less than 0";
             log::warn!("{}", err);
@@ -111,7 +116,7 @@ impl TDPDevice for Tdp {
         let tdp = self.tdp().await?;
         let boost = value;
         let short_tdp = if boost > 0.0 {
-            ((boost / 2.0) + tdp) * 1000000.0
+            (boost + tdp) * 1000000.0
         } else {
             tdp * 1000000.0
         };
@@ -120,14 +125,6 @@ impl TDPDevice for Tdp {
         let path = "/sys/class/powercap/intel-rapl/intel-rapl:0/constraint_1_power_limit_uw";
         let file = OpenOptions::new().write(true).open(path);
         let value = format!("{}", short_tdp);
-        file.map_err(|err| TDPError::FailedOperation(err.to_string()))?
-            .write_all(value.as_bytes())
-            .map_err(|err| TDPError::IOError(err.to_string()))?;
-
-        // Write the peak tdp
-        let path = "/sys/class/powercap/intel-rapl/intel-rapl:0/constraint_2_power_limit_uw";
-        let file = OpenOptions::new().write(true).open(path);
-        let value = format!("{}", (boost + tdp) * 1000000.0);
         file.map_err(|err| TDPError::FailedOperation(err.to_string()))?
             .write_all(value.as_bytes())
             .map_err(|err| TDPError::IOError(err.to_string()))
