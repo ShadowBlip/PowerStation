@@ -27,3 +27,9 @@ model_name = "Intel(R) Core(TM) m3-7Y30 CPU @ 1.00GHz"
 min_tdp = 3.0
 max_tdp = 7.0
 max_boost = 2.0
+
+[[models]]
+model_name = "Intel(R) Core(TM) Ultra 7 258V"
+min_tdp = 5.0
+max_tdp = 30.0
+max_boost = 2.0
