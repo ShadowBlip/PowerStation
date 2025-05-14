@@ -21,6 +21,20 @@ impl TDPDevices {
         }
     }
 
+    pub async fn min_tdp(&self) -> TDPResult<f64> {
+        match self {
+            Self::Amd(dev) => dev.min_tdp().await,
+            Self::Intel(dev) => dev.min_tdp().await,
+        }
+    }
+
+    pub async fn max_tdp(&self) -> TDPResult<f64> {
+        match self {
+            Self::Amd(dev) => dev.max_tdp().await,
+            Self::Intel(dev) => dev.max_tdp().await,
+        }
+    }
+
     pub async fn set_tdp(&mut self, value: f64) -> TDPResult<()> {
         match self {
             Self::Amd(dev) => dev.set_tdp(value).await,
@@ -32,6 +46,13 @@ impl TDPDevices {
         match self {
             Self::Amd(dev) => dev.boost().await,
             Self::Intel(dev) => dev.boost().await,
+        }
+    }
+
+    pub async fn max_boost(&self) -> TDPResult<f64> {
+        match self {
+            Self::Amd(dev) => dev.max_boost().await,
+            Self::Intel(dev) => dev.max_boost().await,
         }
     }
 

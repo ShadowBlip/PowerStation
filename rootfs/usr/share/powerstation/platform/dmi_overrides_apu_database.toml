@@ -1,0 +1,35 @@
+[[models]]
+model_name = "NEO-01"
+min_tdp = 8.0
+max_tdp = 28.0
+max_boost = 4.0
+
+[[models]]
+model_name = "AIR"
+min_tdp = 5.0
+max_tdp = 15.0
+max_boost = 0.0
+
+[[models]]
+model_name = "AIR Pro"
+min_tdp = 5.0
+max_tdp = 18.0
+max_boost = 0.0
+
+[[models]]
+model_name = "ROG Ally RC71L_RC71L"
+min_tdp = 8.0
+max_tdp = 30.0
+max_boost = 10.0
+
+[[models]]
+model_name = "ROG Ally RC71L"
+min_tdp = 8.0
+max_tdp = 30.0
+max_boost = 10.0
+
+[[models]]
+model_name = "ROG Ally X RC72LA_RC72LA"
+min_tdp = 8.0
+max_tdp = 30.0
+max_boost = 10.0

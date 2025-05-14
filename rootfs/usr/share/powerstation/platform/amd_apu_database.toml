@@ -1,0 +1,563 @@
+[[models]]
+model_name = "AMD Athlon Silver 3020e with Radeon Graphics"
+min_tdp = 2.0
+max_tdp = 12.0
+max_boost = 6.0
+
+[[models]]
+model_name = "AMD Athlon Silver 3050e with Radeon Graphics"
+min_tdp = 2.0
+max_tdp = 20.0
+max_boost = 5.0
+
+[[models]]
+model_name = "AMD Custom APU 0405"
+min_tdp = 3.0
+max_tdp = 15.0
+max_boost = 5.0
+
+[[models]]
+model_name = "AMD Ryzen 3 2200U with Radeon Graphics"
+min_tdp = 2.0
+max_tdp = 20.0
+max_boost = 5.0
+
+[[models]]
+model_name = "AMD Ryzen 3 2300U with Radeon Graphics"
+min_tdp = 2.0
+max_tdp = 25.0
+max_boost = 5.0
+
+[[models]]
+model_name = "AMD Ryzen 3 3200U with Radeon Graphics"
+min_tdp = 2.0
+max_tdp = 20.0
+max_boost = 5.0
+
+[[models]]
+model_name = "AMD Ryzen 3 3300U with Radeon Graphics"
+min_tdp = 2.0
+max_tdp = 25.0
+max_boost = 5.0
+
+[[models]]
+model_name = "AMD Ryzen 3 4300U with Radeon Graphics"
+min_tdp = 2.0
+max_tdp = 23.0
+max_boost = 2.0
+
+[[models]]
+model_name = "AMD Ryzen 3 5125C with Radeon Graphics"
+min_tdp = 2.0
+max_tdp = 15.0
+max_boost = 2.0
+
+[[models]]
+model_name = "AMD Ryzen 3 5300U with Radeon Graphics"
+min_tdp = 5.0
+max_tdp = 23.0
+max_boost = 2.0
+
+[[models]]
+model_name = "AMD Ryzen 3 5400U with Radeon Graphics"
+min_tdp = 5.0
+max_tdp = 23.0
+max_boost = 2.0
+
+[[models]]
+model_name = "AMD Ryzen 3 5425C with Radeon Graphics"
+min_tdp = 5.0
+max_tdp = 23.0
+max_boost = 2.0
+
+[[models]]
+model_name = "AMD Ryzen 3 5425U with Radeon Graphics"
+min_tdp = 2.0
+max_tdp = 15.0
+max_boost = 2.0
+
+[[models]]
+model_name = "AMD Ryzen 5 2500U with Radeon Graphics"
+min_tdp = 5.0
+max_tdp = 25.0
+max_boost = 5.0
+
+[[models]]
+model_name = "AMD Ryzen 5 3500U with Radeon Graphics"
+min_tdp = 5.0
+max_tdp = 30.0
+max_boost = 5.0
+
+[[models]]
+model_name = "AMD Ryzen 5 3550H with Radeon Graphics"
+min_tdp = 5.0
+max_tdp = 35.0
+max_boost = 5.0
+
+[[models]]
+model_name = "AMD Ryzen 5 4500U with Radeon Graphics"
+min_tdp = 5.0
+max_tdp = 28.0
+max_boost = 2.0
+
+[[models]]
+model_name = "AMD Ryzen 5 4600H with Radeon Graphics"
+min_tdp = 5.0
+max_tdp = 55.0
+max_boost = 11.0
+
+[[models]]
+model_name = "AMD Ryzen 5 4600HS with Radeon Graphics"
+min_tdp = 5.0
+max_tdp = 45.0
+max_boost = 11.0
+
+[[models]]
+model_name = "AMD Ryzen 5 4600U with Radeon Graphics"
+min_tdp = 5.0
+max_tdp = 33.0
+max_boost = 5.0
+
+[[models]]
+model_name = "AMD Ryzen 5 5500U with Radeon Graphics"
+min_tdp = 5.0
+max_tdp = 28.0
+max_boost = 2.0
+
+[[models]]
+model_name = "AMD Ryzen 5 5560U with Radeon Graphics"
+min_tdp = 3.0
+max_tdp = 28.0
+max_boost = 2.0
+
+[[models]]
+model_name = "AMD Ryzen 5 5600H with Radeon Graphics"
+min_tdp = 2.0
+max_tdp = 12.0
+max_boost = 6.0
+
+[[models]]
+model_name = "AMD Ryzen 5 5600HS with Radeon Graphics"
+min_tdp = 5.0
+max_tdp = 45.0
+max_boost = 11.0
+
+[[models]]
+model_name = "AMD Ryzen 5 5600U with Radeon Graphics"
+min_tdp = 5.0
+max_tdp = 33.0
+max_boost = 5.0
+
+[[models]]
+model_name = "AMD Ryzen 5 5625C with Radeon Graphics"
+min_tdp = 2.0
+max_tdp = 15.0
+max_boost = 2.0
+
+[[models]]
+model_name = "AMD Ryzen 5 5625U with Radeon Graphics"
+min_tdp = 5.0
+max_tdp = 33.0
+max_boost = 5.0
+
+[[models]]
+model_name = "AMD Ryzen 5 6600H with Radeon Graphics"
+min_tdp = 5.0
+max_tdp = 58.0
+max_boost = 10.0
+
+[[models]]
+model_name = "AMD Ryzen 5 6600HS with Radeon Graphics"
+min_tdp = 5.0
+max_tdp = 45.0
+max_boost = 11.0
+
+[[models]]
+model_name = "AMD Ryzen 5 6600U with Radeon Graphics"
+min_tdp = 5.0
+max_tdp = 33.0
+max_boost = 5.0
+
+[[models]]
+model_name = "AMD Ryzen 7 2700U with Radeon Graphics"
+min_tdp = 5.0
+max_tdp = 25.0
+max_boost = 5.0
+
+[[models]]
+model_name = "AMD Ryzen 7 3700U with Radeon Graphics"
+min_tdp = 5.0
+max_tdp = 30.0
+max_boost = 10.0
+
+[[models]]
+model_name = "AMD Ryzen 7 3750H with Radeon Graphics"
+min_tdp = 5.0
+max_tdp = 40.0
+max_boost = 10.0
+
+[[models]]
+model_name = "AMD Ryzen 7 4700U with Radeon Graphics"
+min_tdp = 2.0
+max_tdp = 12.0
+max_boost = 6.0
+
+[[models]]
+model_name = "AMD Ryzen 7 4800H with Radeon Graphics"
+min_tdp = 5.0
+max_tdp = 60.0
+max_boost = 8.0
+
+[[models]]
+model_name = "AMD Ryzen 7 4800HS with Radeon Graphics"
+min_tdp = 5.0
+max_tdp = 50.0
+max_boost = 8.0
+
+[[models]]
+model_name = "AMD Ryzen 7 4800U with Radeon Graphics"
+min_tdp = 5.0
+max_tdp = 33.0
+max_boost = 5.0
+
+[[models]]
+model_name = "AMD Ryzen 7 4980U with Radeon Graphics"
+min_tdp = 10.0
+max_tdp = 15.0
+max_boost = 10.0
+
+[[models]]
+model_name = "AMD Ryzen 7 5700U with Radeon Graphics"
+min_tdp = 5.0
+max_tdp = 28.0
+max_boost = 2.0
+
+[[models]]
+model_name = "AMD Ryzen 7 5800H with Radeon Graphics"
+min_tdp = 10.0
+max_tdp = 68.0
+max_boost = 4.0
+
+[[models]]
+model_name = "AMD Ryzen 7 5800HS with Radeon Graphics"
+min_tdp = 10.0
+max_tdp = 50.0
+max_boost = 8.0
+
+[[models]]
+model_name = "AMD Ryzen 7 5800U with Radeon Graphics"
+min_tdp = 5.0
+max_tdp = 33.0
+max_boost = 5.0
+
+[[models]]
+model_name = "AMD Ryzen 7 5825C with Radeon Graphics"
+min_tdp = 10.0
+max_tdp = 15.0
+max_boost = 10.0
+
+[[models]]
+model_name = "AMD Ryzen 7 5825U with Radeon Graphics"
+min_tdp = 5.0
+max_tdp = 33.0
+max_boost = 5.0
+
+[[models]]
+model_name = "AMD Ryzen 7 6800H with Radeon Graphics"
+min_tdp = 10.0
+max_tdp = 58.0
+max_boost = 10.0
+
+[[models]]
+model_name = "AMD Ryzen 7 6800HS with Radeon Graphics"
+min_tdp = 10.0
+max_tdp = 50.0
+max_boost = 8.0
+
+[[models]]
+model_name = "AMD Ryzen 7 6800U with Radeon Graphics"
+min_tdp = 5.0
+max_tdp = 33.0
+max_boost = 5.0
+
+[[models]]
+model_name = "AMD Ryzen 9 4900H with Radeon Graphics"
+min_tdp = 10.0
+max_tdp = 60.0
+max_boost = 8.0
+
+[[models]]
+model_name = "AMD Ryzen 9 4900HS with Radeon Graphics"
+min_tdp = 5.0
+max_tdp = 50.0
+max_boost = 8.0
+
+[[models]]
+model_name = "AMD Ryzen 9 5900HS with Radeon Graphics"
+min_tdp = 10.0
+max_tdp = 50.0
+max_boost = 8.0
+
+[[models]]
+model_name = "AMD Ryzen 9 5900HX with Radeon Graphics"
+min_tdp = 10.0
+max_tdp = 70.0
+max_boost = 20.0
+
+[[models]]
+model_name = "AMD Ryzen 9 5980HS with Radeon Graphics"
+min_tdp = 10.0
+max_tdp = 50.0
+max_boost = 8.0
+
+[[models]]
+model_name = "AMD Ryzen 9 5980HX with Radeon Graphics"
+min_tdp = 10.0
+max_tdp = 70.0
+max_boost = 20.0
+
+[[models]]
+model_name = "AMD Ryzen 9 6900HS with Radeon Graphics"
+min_tdp = 10.0
+max_tdp = 50.0
+max_boost = 8.0
+
+[[models]]
+model_name = "AMD Ryzen 9 6900HX with Radeon Graphics"
+min_tdp = 10.0
+max_tdp = 70.0
+max_boost = 20.0
+
+[[models]]
+model_name = "AMD Ryzen 9 6980HS with Radeon Graphics"
+min_tdp = 10.0
+max_tdp = 50.0
+max_boost = 8.0
+
+[[models]]
+model_name = "AMD Ryzen 9 6980HX with Radeon Graphics"
+min_tdp = 10.0
+max_tdp = 70.0
+max_boost = 20.0
+
+[[models]]
+model_name = "AMD Ryzen Embedded R1305G with Radeon Vega Gfx"
+min_tdp = 6.0
+max_tdp = 25.0
+max_boost = 2.0
+
+[[models]]
+model_name = "AMD Ryzen Embedded R1505G with Radeon Vega Gfx"
+min_tdp = 6.0
+max_tdp = 25.0
+max_boost = 2.0
+
+[[models]]
+model_name = "AMD Ryzen Embedded R1606G with Radeon Vega Gfx"
+min_tdp = 6.0
+max_tdp = 10.0
+max_boost = 2.0
+
+[[models]]
+model_name = "AMD Ryzen Z1 Extreme"
+min_tdp = 5.0
+max_tdp = 35.0
+max_boost = 5.0
+
+[[models]]
+model_name = "AMD Ryzen 7 7840U w/ Radeon 780M Graphics"
+min_tdp = 5.0
+max_tdp = 35.0
+max_boost = 5.0
+
+[[models]]
+model_name = "AMD Ryzen 9 7940HS w/ Radeon 780M Graphics"
+min_tdp = 35.0
+max_tdp = 54.0
+max_boost = 8.0
+
+[[models]]
+model_name = "AMD Ryzen 9 7945HX w/ Radeon 610M Graphics"
+min_tdp = 55.0
+max_tdp = 75.0
+max_boost = 10.0
+
+[[models]]
+model_name = "AMD Ryzen 9 7845HX w/ Radeon 610M Graphics"
+min_tdp = 45.0
+max_tdp = 75.0
+max_boost = 10.0
+
+[[models]]
+model_name = "AMD Ryzen 9 7745HX w/ Radeon 610M Graphics"
+min_tdp = 45.0
+max_tdp = 75.0
+max_boost = 10.0
+
+[[models]]
+model_name = "AMD Ryzen 9 7644HX w/ Radeon 610M Graphics"
+min_tdp = 45.0
+max_tdp = 75.0
+max_boost = 10.0
+
+[[models]]
+model_name = "AMD Ryzen 7 7840HS w/ Radeon 780M Graphics"
+min_tdp = 35.0
+max_tdp = 54.0
+max_boost = 8.0
+
+[[models]]
+model_name = "AMD Ryzen 7 7735HS with Radeon Graphics"
+min_tdp = 35.0
+max_tdp = 54.0
+max_boost = 8.0
+
+[[models]]
+model_name = "AMD Ryzen 7 7736U w/ Radeon 680M Graphics"
+min_tdp = 5.0
+max_tdp = 28.0
+max_boost = 5.0
+
+[[models]]
+model_name = "AMD Ryzen 7 7735U w/ Radeon 680M Graphics"
+min_tdp = 5.0
+max_tdp = 28.0
+max_boost = 5.0
+
+[[models]]
+model_name = "AMD Ryzen 7 7730U w/ Radeon Graphics"
+min_tdp = 5.0
+max_tdp = 15.0
+max_boost = 3.0
+
+[[models]]
+model_name = "AMD Ryzen 5 7645HX w/ Radeon 760M Graphics"
+min_tdp = 35.0
+max_tdp = 55.0
+max_boost = 8.0
+
+[[models]]
+model_name = "AMD Ryzen 5 7640HS w/ Radeon 760M Graphics"
+min_tdp = 35.0
+max_tdp = 54.0
+max_boost = 8.0
+
+[[models]]
+model_name = "AMD Ryzen 5 7535HS w/ Radeon 680M Graphics"
+min_tdp = 35.0
+max_tdp = 54.0
+max_boost = 8.0
+
+[[models]]
+model_name = "AMD Ryzen 5 7640U w/ Radeon 760M Graphics"
+min_tdp = 5.0
+max_tdp = 30.0
+max_boost = 5.0
+
+[[models]]
+model_name = "AMD Ryzen 5 7540U w/ Radeon 740M Graphics"
+min_tdp = 5.0
+max_tdp = 30.0
+max_boost = 5.0
+
+[[models]]
+model_name = "AMD Ryzen 5 7535U w/ Radeon 660M Graphics"
+min_tdp = 5.0
+max_tdp = 28.0
+max_boost = 5.0
+
+[[models]]
+model_name = "AMD Ryzen 5 7530U w/ Radeon Graphics"
+min_tdp = 5.0
+max_tdp = 15.0
+max_boost = 3.0
+
+[[models]]
+model_name = "AMD Ryzen 5 7520U w/ Radeon 610M Graphics"
+min_tdp = 5.0
+max_tdp = 15.0
+max_boost = 3.0
+
+[[models]]
+model_name = "AMD Ryzen 3 7440U w/ Radeon 740M Graphics"
+min_tdp = 5.0
+max_tdp = 30.0
+max_boost = 5.0
+
+[[models]]
+model_name = "AMD Ryzen 3 7335U w/ Radeon 660M Graphics"
+min_tdp = 5.0
+max_tdp = 28.0
+max_boost = 5.0
+
+[[models]]
+model_name = "AMD Ryzen 3 7330U w/ Radeon Graphics"
+min_tdp = 5.0
+max_tdp = 15.0
+max_boost = 3.0
+
+[[models]]
+model_name = "AMD Ryzen 3 7320U w/ Radeon 610M Graphics"
+min_tdp = 5.0
+max_tdp = 15.0
+max_boost = 0.0
+
+[[models]]
+model_name = "AMD Custom APU 0932"
+min_tdp = 3.0
+max_tdp = 15.0
+max_boost = 5.0
+
+[[models]]
+model_name = "AMD Ryzen 9 8945HS w/ Radeon 780M Graphics"
+min_tdp = 35.0
+max_tdp = 54.0
+max_boost = 8.0
+
+[[models]]
+model_name = "AMD Ryzen 7 8845HS w/ Radeon 780M Graphics"
+min_tdp = 35.0
+max_tdp = 54.0
+max_boost = 8.0
+
+[[models]]
+model_name = "AMD Ryzen 7 8840HS w/ Radeon 780M Graphics"
+min_tdp = 5.0
+max_tdp = 35.0
+max_boost = 5.0
+
+[[models]]
+model_name = "AMD Ryzen 7 8840U w/ Radeon 780M Graphics"
+min_tdp = 5.0
+max_tdp = 35.0
+max_boost = 5.0
+
+[[models]]
+model_name = "AMD Ryzen 5 8645HS w/ Radeon 760M Graphics"
+min_tdp = 35.0
+max_tdp = 54.0
+max_boost = 8.0
+
+[[models]]
+model_name = "AMD Ryzen 5 8640HS w/ Radeon 760M Graphics"
+min_tdp = 5.0
+max_tdp = 30.0
+max_boost = 5.0
+
+[[models]]
+model_name = "AMD Ryzen 5 8640U w/ Radeon 760M Graphics"
+min_tdp = 5.0
+max_tdp = 30.0
+max_boost = 5.0
+
+[[models]]
+model_name = "AMD Ryzen 5 8540U w/ Radeon 740M Graphics"
+min_tdp = 5.0
+max_tdp = 30.0
+max_boost = 5.0
+
+[[models]]
+model_name = "AMD Ryzen 3 8540U w/ Radeon 740M Graphics"
+min_tdp = 5.0
+max_tdp = 30.0
+max_boost = 0.0

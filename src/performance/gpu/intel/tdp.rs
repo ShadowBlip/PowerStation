@@ -1,16 +1,31 @@
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 
-use crate::performance::gpu::tdp::{TDPDevice, TDPError, TDPResult};
+use crate::performance::gpu::{
+    platform::hardware::Hardware,
+    tdp::{TDPDevice, TDPError, TDPResult},
+};
 
 /// Implementation of TDP control for Intel GPUs
 pub struct Tdp {
     //pub path: String,
+    hardware: Option<Hardware>,
 }
 
 impl Tdp {
     pub fn new(_path: String) -> Tdp {
-        Tdp {} //path }
+        let hardware = match Hardware::new() {
+            Some(hardware) => {
+                log::info!("Found Hardware interface for TDP control");
+                Some(hardware)
+            }
+            None => None,
+        };
+
+        Tdp {
+            hardware,
+            //path
+        }
     }
 }
 
@@ -57,6 +72,28 @@ impl TDPDevice for Tdp {
 
         // Update the boost value
         self.set_boost(boost).await
+    }
+
+    async fn min_tdp(&self) -> TDPResult<f64> {
+        log::info!("Get TDP Min");
+        if self.hardware.is_some() {
+            let hardware = self.hardware.as_ref().unwrap();
+            return Ok(hardware.min_tdp());
+        }
+        Err(TDPError::FailedOperation(
+            "No Hardware interface available to read min TDP.".into(),
+        ))
+    }
+
+    async fn max_tdp(&self) -> TDPResult<f64> {
+        log::info!("Get TDP Max");
+        if self.hardware.is_some() {
+            let hardware = self.hardware.as_ref().unwrap();
+            return Ok(hardware.max_tdp());
+        }
+        Err(TDPError::FailedOperation(
+            "No Hardware interface available to read max TDP.".into(),
+        ))
     }
 
     async fn boost(&self) -> TDPResult<f64> {
@@ -107,6 +144,17 @@ impl TDPDevice for Tdp {
         file.map_err(|err| TDPError::FailedOperation(err.to_string()))?
             .write_all(value.as_bytes())
             .map_err(|err| TDPError::IOError(err.to_string()))
+    }
+
+    async fn max_boost(&self) -> TDPResult<f64> {
+        log::info!("Get TDP Max Boost");
+        if self.hardware.is_some() {
+            let hardware = self.hardware.as_ref().unwrap();
+            return Ok(hardware.max_boost());
+        }
+        Err(TDPError::FailedOperation(
+            "No Hardware interface available to read max boost.".into(),
+        ))
     }
 
     async fn thermal_throttle_limit_c(&self) -> TDPResult<f64> {

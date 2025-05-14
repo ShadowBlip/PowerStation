@@ -7,6 +7,7 @@
      and the STAPM limit.
      -->
     <property name="Boost" type="d" access="readwrite"/>
+    <property name="MaxBoost" type="d" access="read"/>
     <property name="PowerProfile" type="s" access="readwrite"/>
     <!--
      Get the currently set TDP value
@@ -15,6 +16,8 @@
      Sets the given TDP value
      -->
     <property name="TDP" type="d" access="readwrite"/>
+    <property name="MinTDP" type="d" access="read"/>
+    <property name="MaxTDP" type="d" access="read"/>
     <property name="ThermalThrottleLimitC" type="d" access="readwrite"/>
   </interface>
   <interface name="org.shadowblip.GPU.Card">

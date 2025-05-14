@@ -49,11 +49,35 @@ impl GPUTDPDBusIface {
         }
     }
 
+    #[dbus_interface(property)]
+    async fn min_tdp(&self) -> fdo::Result<f64> {
+        match self.dev.lock().await.min_tdp().await {
+            TDPResult::Ok(result) => Ok(result),
+            TDPResult::Err(err) => Err(err.into()),
+        }
+    }
+
+    #[dbus_interface(property)]
+    async fn max_tdp(&self) -> fdo::Result<f64> {
+        match self.dev.lock().await.max_tdp().await {
+            TDPResult::Ok(result) => Ok(result),
+            TDPResult::Err(err) => Err(err.into()),
+        }
+    }
+
     /// The TDP boost for AMD is the total difference between the Fast PPT Limit
     /// and the STAPM limit.
     #[dbus_interface(property)]
     async fn boost(&self) -> fdo::Result<f64> {
         match self.dev.lock().await.boost().await {
+            TDPResult::Ok(result) => Ok(result),
+            TDPResult::Err(err) => Err(err.into()),
+        }
+    }
+
+    #[dbus_interface(property)]
+    async fn max_boost(&self) -> fdo::Result<f64> {
+        match self.dev.lock().await.max_boost().await {
             TDPResult::Ok(result) => Ok(result),
             TDPResult::Err(err) => Err(err.into()),
         }

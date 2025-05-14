@@ -1,6 +1,7 @@
 use crate::performance::gpu::{
     acpi::firmware::Acpi,
     asus::asus_wmi::AsusWmi,
+    platform::hardware::Hardware,
     tdp::{TDPDevice, TDPError, TDPResult},
 };
 
@@ -13,6 +14,7 @@ pub struct Tdp {
     acpi: Option<Acpi>,
     #[cfg(target_arch = "x86_64")]
     ryzenadj: Option<RyzenAdjTdp>,
+    hardware: Option<Hardware>,
 }
 
 impl Tdp {
@@ -45,11 +47,20 @@ impl Tdp {
             }
         };
 
+        let hardware = match Hardware::new() {
+            Some(hardware) => {
+                log::info!("Found Hardware interface for TDP control");
+                Some(hardware)
+            }
+            None => None,
+        };
+
         Tdp {
             asus_wmi,
             acpi,
             #[cfg(target_arch = "x86_64")]
             ryzenadj,
+            hardware,
         }
     }
 }
@@ -122,6 +133,28 @@ impl TDPDevice for Tdp {
         ))
     }
 
+    async fn min_tdp(&self) -> TDPResult<f64> {
+        log::info!("Get TDP Min");
+        if self.hardware.is_some() {
+            let hardware = self.hardware.as_ref().unwrap();
+            return Ok(hardware.min_tdp());
+        }
+        Err(TDPError::FailedOperation(
+            "No Hardware interface available to read min TDP.".into(),
+        ))
+    }
+
+    async fn max_tdp(&self) -> TDPResult<f64> {
+        log::info!("Get TDP Max");
+        if self.hardware.is_some() {
+            let hardware = self.hardware.as_ref().unwrap();
+            return Ok(hardware.max_tdp());
+        }
+        Err(TDPError::FailedOperation(
+            "No Hardware interface available to read max TDP.".into(),
+        ))
+    }
+
     async fn boost(&self) -> TDPResult<f64> {
         log::info!("Get TDP Boost");
         if self.asus_wmi.is_some() {
@@ -183,6 +216,17 @@ impl TDPDevice for Tdp {
         };
         Err(TDPError::FailedOperation(
             "No TDP Interface available to set boost.".into(),
+        ))
+    }
+
+    async fn max_boost(&self) -> TDPResult<f64> {
+        log::info!("Get TDP Max Boost");
+        if self.hardware.is_some() {
+            let hardware = self.hardware.as_ref().unwrap();
+            return Ok(hardware.max_boost());
+        }
+        Err(TDPError::FailedOperation(
+            "No Hardware interface available to read max boost.".into(),
         ))
     }
 
