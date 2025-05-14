@@ -5,5 +5,5 @@ pub mod connector;
 pub mod dbus;
 pub mod intel;
 pub mod interface;
-pub mod tdp;
 pub mod platform;
+pub mod tdp;

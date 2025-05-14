@@ -4,8 +4,8 @@ use std::error::Error;
 use libryzenadj::RyzenAdj;
 
 use crate::performance::gpu::{
-    platform::hardware::Hardware, 
-    tdp::{HardwareAccess, TDPDevice, TDPError, TDPResult}
+    platform::hardware::Hardware,
+    tdp::{HardwareAccess, TDPDevice, TDPError, TDPResult},
 };
 
 /// Steam Deck GPU ID
@@ -58,7 +58,7 @@ impl RyzenAdjTdp {
             _ => 95.0,
         };
         let ryzenadj = RyzenAdj::new().map_err(|err| err.to_string())?;
-        
+
         // Get hardware instance for min/max TDP values
         let hardware = match Hardware::new() {
             Some(hardware) => {
@@ -101,7 +101,7 @@ impl RyzenAdjTdp {
     // Get the PPT slow limit
     fn get_ppt_limit_slow(&self) -> Result<f32, String> {
         log::debug!("Getting ppt slow limit");
-        
+
         if let Err(e) = self.ryzenadj.refresh() {
             log::error!("Failed to refresh ryzenadj: {}", e);
         }

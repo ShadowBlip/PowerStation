@@ -41,6 +41,7 @@ impl TDPDevice for Tdp {
         let path = "/sys/class/powercap/intel-rapl/intel-rapl:0/constraint_0_power_limit_uw";
         let result = fs::read_to_string(path);
         let content = result.map_err(|err| TDPError::IOError(err.to_string()))?;
+        let content = content.trim();
 
         // Parse the output to get the long TDP
         let long_tdp = match content.parse::<f64>() {
@@ -85,6 +86,7 @@ impl TDPDevice for Tdp {
         let path = "/sys/class/powercap/intel-rapl/intel-rapl:0/constraint_2_power_limit_uw";
         let result = fs::read_to_string(path);
         let content = result.map_err(|err| TDPError::IOError(err.to_string()))?;
+        let content = content.trim();
 
         // Parse the output to get the peak TDP
         let peak_tdp = match content.parse::<f64>() {
