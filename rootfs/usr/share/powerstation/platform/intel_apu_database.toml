@@ -1,0 +1,29 @@
+[[models]]
+model_name = "11th Gen Intel(R) Core(TM) i5-1135G7 @ 2.40GHz"
+min_tdp = 12.0
+max_tdp = 28.0
+max_boost = 2.0
+
+[[models]]
+model_name = "11th Gen Intel(R) Core(TM) i7-1165G7 @ 2.80GHz"
+min_tdp = 12.0
+max_tdp = 28.0
+max_boost = 2.0
+
+[[models]]
+model_name = "11th Gen Intel(R) Core(TM) i7-1195G7 @ 2.90GHz"
+min_tdp = 12.0
+max_tdp = 28.0
+max_boost = 2.0
+
+[[models]]
+model_name = "Intel(R) Core(TM) m3-8100Y CPU @ 1.10GHz"
+min_tdp = 3.0
+max_tdp = 8.0
+max_boost = 2.0
+
+[[models]]
+model_name = "Intel(R) Core(TM) m3-7Y30 CPU @ 1.00GHz"
+min_tdp = 3.0
+max_tdp = 7.0
+max_boost = 2.0
