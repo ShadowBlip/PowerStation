@@ -17,26 +17,56 @@ max_tdp = 18.0
 max_boost = 0.0
 
 [[models]]
+model_name = "AIR 1S"
+min_tdp = 5.0
+max_tdp = 25.0
+max_boost = 0.0
+
+[[models]]
+model_name = "AIR 1S Limited"
+min_tdp = 5.0
+max_tdp = 25.0
+max_boost = 0.0
+
+[[models]]
+model_name = "AIR Plus"
+min_tdp = 5.0
+max_tdp = 28.0
+max_boost = 0.0
+
+[[models]]
 model_name = "ROG Ally RC71L_RC71L"
-min_tdp = 8.0
+min_tdp = 5.0
 max_tdp = 30.0
 max_boost = 10.0
 
 [[models]]
 model_name = "ROG Ally RC71L"
-min_tdp = 8.0
+min_tdp = 5.0
 max_tdp = 30.0
 max_boost = 10.0
 
 [[models]]
 model_name = "ROG Ally X RC72LA_RC72LA"
-min_tdp = 8.0
+min_tdp = 5.0
 max_tdp = 30.0
 max_boost = 10.0
 
 
 [[models]]
 model_name = "G1617-01"
+min_tdp = 5.0
+max_tdp = 28.0
+max_boost = 0.0
+
+[[models]]
+model_name = "G1617-02"
+min_tdp = 5.0
+max_tdp = 28.0
+max_boost = 0.0
+
+[[models]]
+model_name = "G1618-04"
 min_tdp = 5.0
 max_tdp = 28.0
 max_boost = 0.0
