@@ -2,7 +2,7 @@ use crate::performance::gpu::{
     acpi::firmware::Acpi,
     asus::asus_wmi::AsusWmi,
     platform::hardware::Hardware,
-    tdp::{TDPDevice, TDPError, TDPResult},
+    tdp::{HardwareAccess, TDPDevice, TDPError, TDPResult},
 };
 
 #[cfg(target_arch = "x86_64")]
@@ -15,6 +15,13 @@ pub struct Tdp {
     #[cfg(target_arch = "x86_64")]
     ryzenadj: Option<RyzenAdjTdp>,
     hardware: Option<Hardware>,
+}
+
+// Implement HardwareAccess for Tdp
+impl HardwareAccess for Tdp {
+    fn hardware(&self) -> Option<&Hardware> {
+        self.hardware.as_ref()
+    }
 }
 
 impl Tdp {
@@ -133,28 +140,6 @@ impl TDPDevice for Tdp {
         ))
     }
 
-    async fn min_tdp(&self) -> TDPResult<f64> {
-        log::info!("Get TDP Min");
-        if self.hardware.is_some() {
-            let hardware = self.hardware.as_ref().unwrap();
-            return Ok(hardware.min_tdp());
-        }
-        Err(TDPError::FailedOperation(
-            "No Hardware interface available to read min TDP.".into(),
-        ))
-    }
-
-    async fn max_tdp(&self) -> TDPResult<f64> {
-        log::info!("Get TDP Max");
-        if self.hardware.is_some() {
-            let hardware = self.hardware.as_ref().unwrap();
-            return Ok(hardware.max_tdp());
-        }
-        Err(TDPError::FailedOperation(
-            "No Hardware interface available to read max TDP.".into(),
-        ))
-    }
-
     async fn boost(&self) -> TDPResult<f64> {
         log::info!("Get TDP Boost");
         if self.asus_wmi.is_some() {
@@ -216,17 +201,6 @@ impl TDPDevice for Tdp {
         };
         Err(TDPError::FailedOperation(
             "No TDP Interface available to set boost.".into(),
-        ))
-    }
-
-    async fn max_boost(&self) -> TDPResult<f64> {
-        log::info!("Get TDP Max Boost");
-        if self.hardware.is_some() {
-            let hardware = self.hardware.as_ref().unwrap();
-            return Ok(hardware.max_boost());
-        }
-        Err(TDPError::FailedOperation(
-            "No Hardware interface available to read max boost.".into(),
         ))
     }
 
