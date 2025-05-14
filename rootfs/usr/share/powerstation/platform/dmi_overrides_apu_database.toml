@@ -66,6 +66,12 @@ max_tdp = 28.0
 max_boost = 0.0
 
 [[models]]
+model_name = "G1618-03"
+min_tdp = 5.0
+max_tdp = 28.0
+max_boost = 0.0
+
+[[models]]
 model_name = "G1618-04"
 min_tdp = 5.0
 max_tdp = 28.0
