@@ -3,7 +3,10 @@ use std::error::Error;
 
 use libryzenadj::RyzenAdj;
 
-use crate::performance::gpu::tdp::{TDPDevice, TDPError, TDPResult};
+use crate::performance::gpu::{
+    platform::hardware::Hardware, 
+    tdp::{HardwareAccess, TDPDevice, TDPError, TDPResult}
+};
 
 /// Steam Deck GPU ID
 const DEV_ID_VANGOGH: &str = "163f";
@@ -18,6 +21,15 @@ pub struct RyzenAdjTdp {
     pub unsupported_stapm_limit: f32,
     pub unsupported_ppt_limit_fast: f32,
     pub unsupported_thm_limit: f32,
+    // We need Hardware for the TDPDevice trait's default methods
+    hardware: Option<Hardware>,
+}
+
+// Implement HardwareAccess for RyzenAdjTdp
+impl HardwareAccess for RyzenAdjTdp {
+    fn hardware(&self) -> Option<&Hardware> {
+        self.hardware.as_ref()
+    }
 }
 
 unsafe impl Sync for RyzenAdjTdp {} // implementor (RyzenAdj) may be unsafe
@@ -46,6 +58,15 @@ impl RyzenAdjTdp {
             _ => 95.0,
         };
         let ryzenadj = RyzenAdj::new().map_err(|err| err.to_string())?;
+        
+        // Get hardware instance for min/max TDP values
+        let hardware = match Hardware::new() {
+            Some(hardware) => {
+                log::info!("Found Hardware interface for RyzenAdj TDP control");
+                Some(hardware)
+            }
+            None => None,
+        };
 
         Ok(RyzenAdjTdp {
             //path,
@@ -55,6 +76,7 @@ impl RyzenAdjTdp {
             unsupported_stapm_limit,
             unsupported_ppt_limit_fast,
             unsupported_thm_limit,
+            hardware,
         })
     }
 
