@@ -8,8 +8,9 @@ description = "Daemon for controlling TDP and performance over DBus"
 [package.metadata.generate-rpm]
 assets = [
   { source = "target/release/powerstation", dest = "/usr/bin/powerstation", mode = "755" },
-  { source = "./rootfs/usr/share/dbus-1/system.d/org.shadowblip.PowerStation.conf", dest = "/usr/share/dbus-1/system.d/org.shadowblip.PowerStation.conf", mode = "644" },
-  { source = "./rootfs/usr/lib/systemd/system/powerstation.service", dest = "/usr/lib/systemd/system/powerstation.service", mode = "644" },
+  { source = "rootfs/usr/share/dbus-1/system.d/org.shadowblip.PowerStation.conf", dest = "/usr/share/dbus-1/system.d/org.shadowblip.PowerStation.conf", mode = "644" },
+  { source = "rootfs/usr/lib/systemd/system/powerstation.service", dest = "/usr/lib/systemd/system/powerstation.service", mode = "644" },
+  { source = "rootfs/usr/share/powerstation/platform/*.toml", dest = "/usr/share/powerstation/platform/", mode = "644" },
 ]
 
 [package.metadata.generate-rpm.requires]
