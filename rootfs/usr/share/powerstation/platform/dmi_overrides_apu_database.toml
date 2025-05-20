@@ -35,6 +35,24 @@ max_tdp = 28.0
 max_boost = 0.0
 
 [[models]]
+model_name = "AYANEO 2S"
+min_tdp = 5.0
+max_tdp = 25.0
+max_boost = 0.0
+
+[[models]]
+model_name = "GEEK 1S"
+min_tdp = 5.0
+max_tdp = 25.0
+max_boost = 0.0
+
+[[models]]
+model_name = "SuiPlay0X1"
+min_tdp = 5.0
+max_tdp = 25.0
+max_boost = 0.0
+
+[[models]]
 model_name = "ROG Ally RC71L_RC71L"
 min_tdp = 5.0
 max_tdp = 30.0
