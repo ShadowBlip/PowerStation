@@ -63,7 +63,7 @@ target/$(TARGET_ARCH)/release/powerstation: $(ALL_RS) Cargo.lock
 all: build debug ## Build release and debug builds
 
 .PHONY: run
-run: setup debug ## Build and run
+run: debug ## Build and run
 	sudo ./target/$(TARGET_ARCH)/debug/powerstation
 
 .PHONY: test
