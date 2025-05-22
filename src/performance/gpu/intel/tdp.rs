@@ -12,7 +12,6 @@ pub struct Tdp {
     hardware: Option<Hardware>,
 }
 
-// Implement HardwareAccess for Tdp
 impl HardwareAccess for Tdp {
     fn hardware(&self) -> Option<&Hardware> {
         self.hardware.as_ref()
@@ -29,10 +28,7 @@ impl Tdp {
             None => None,
         };
 
-        Tdp {
-            hardware,
-            //path
-        }
+        Tdp { hardware }
     }
 }
 
