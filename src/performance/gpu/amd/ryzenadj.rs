@@ -25,7 +25,6 @@ pub struct RyzenAdjTdp {
     hardware: Option<Hardware>,
 }
 
-// Implement HardwareAccess for RyzenAdjTdp
 impl HardwareAccess for RyzenAdjTdp {
     fn hardware(&self) -> Option<&Hardware> {
         self.hardware.as_ref()
