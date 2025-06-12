@@ -1232,6 +1232,7 @@ dependencies = [
  "simple_logger",
  "tokio",
  "toml",
+ "udev 0.9.3",
  "xdg",
  "zbus 3.15.2",
  "zbus_macros 3.15.2",
@@ -1372,7 +1373,7 @@ dependencies = [
  "rusb",
  "serde",
  "typeshare",
- "udev",
+ "udev 0.8.0",
  "zbus 5.1.1",
 ]
 
@@ -1800,6 +1801,18 @@ dependencies = [
  "libc",
  "libudev-sys",
  "mio 0.8.11",
+ "pkg-config",
+]
+
+[[package]]
+name = "udev"
+version = "0.9.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "af4e37e9ea4401fc841ff54b9ddfc9be1079b1e89434c1a6a865dd68980f7e9f"
+dependencies = [
+ "io-lifetimes",
+ "libc",
+ "libudev-sys",
  "pkg-config",
 ]
 

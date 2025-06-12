@@ -1,3 +1,5 @@
+use std::io;
+
 #[derive(Debug)]
 pub enum TDPError {
     FeatureUnsupported,
@@ -9,6 +11,12 @@ pub enum TDPError {
 impl From<TDPError> for String {
     fn from(_val: TDPError) -> Self {
         todo!()
+    }
+}
+
+impl From<io::Error> for TDPError {
+    fn from(value: io::Error) -> Self {
+        Self::IOError(value.to_string())
     }
 }
 
