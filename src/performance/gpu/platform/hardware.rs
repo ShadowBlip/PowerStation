@@ -4,6 +4,7 @@ use std::fs;
 use std::io::ErrorKind;
 use std::path::Path;
 
+#[derive(Default, Clone)]
 pub struct Hardware {
     pub min_tdp: f64,
     pub max_tdp: f64,
@@ -22,11 +23,7 @@ impl Hardware {
             Ok(hardware) => Some(hardware),
             Err(e) => {
                 log::error!("Failed to load hardware configuration: {}", e);
-                Some(Self {
-                    min_tdp: 0.0,
-                    max_tdp: 0.0,
-                    max_boost: 0.0,
-                })
+                None
             }
         }
     }

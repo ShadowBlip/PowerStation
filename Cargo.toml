@@ -27,6 +27,7 @@ rog_platform = { git = "https://gitlab.com/asus-linux/asusctl.git", default-feat
 xdg = "2.5.2"
 toml = "0.7.8"
 serde = { version = "1.0", features = ["derive"] }
+udev = { version = "0.9.3", features = ["send", "sync"] }
 
 [target.'cfg(target_arch = "x86_64")'.dependencies]
 libryzenadj = { git = "https://gitlab.com/shadowapex/libryzenadj-rs.git" }

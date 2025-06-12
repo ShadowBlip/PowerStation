@@ -5,6 +5,7 @@ use crate::performance::gpu::{
     tdp::{HardwareAccess, TDPDevice, TDPError, TDPResult},
 };
 
+use super::hwmon::Hwmon;
 #[cfg(target_arch = "x86_64")]
 use super::ryzenadj::RyzenAdjTdp;
 
@@ -14,6 +15,7 @@ pub struct Tdp {
     acpi: Option<Acpi>,
     #[cfg(target_arch = "x86_64")]
     ryzenadj: Option<RyzenAdjTdp>,
+    hwmon: Option<Hwmon>,
     hardware: Option<Hardware>,
 }
 
@@ -42,6 +44,17 @@ impl Tdp {
             None => None,
         };
 
+        let hwmon = match Hwmon::new(path) {
+            Ok(hwmon) => {
+                log::info!("Found hwmon interface for TDP control");
+                Some(hwmon)
+            }
+            Err(e) => {
+                log::debug!("Unable to find hwmon interface: {e}");
+                None
+            }
+        };
+
         #[cfg(target_arch = "x86_64")]
         let ryzenadj = match RyzenAdjTdp::new(path.to_string(), device_id.to_string()) {
             Ok(ryzenadj) => {
@@ -59,7 +72,14 @@ impl Tdp {
                 log::info!("Found Hardware interface for TDP control");
                 Some(hardware)
             }
-            None => None,
+            None => {
+                if let Some(hwmon) = hwmon.as_ref() {
+                    log::info!("Found Hardware interface from hwmon for TDP control");
+                    hwmon.hardware().cloned()
+                } else {
+                    None
+                }
+            }
         };
 
         Tdp {
@@ -67,6 +87,7 @@ impl Tdp {
             acpi,
             #[cfg(target_arch = "x86_64")]
             ryzenadj,
+            hwmon,
             hardware,
         }
     }
@@ -89,6 +110,20 @@ impl TDPDevice for Tdp {
                 }
             };
         };
+
+        // TODO: set platform profile based on % of max TDP.
+        if let Some(hwmon) = self.hwmon.as_ref() {
+            match hwmon.tdp().await {
+                Ok(tdp) => {
+                    log::info!("TDP is currently {tdp}");
+                    return Ok(tdp);
+                }
+                Err(e) => {
+                    log::warn!("Failed to read current TDP using hwmon: {e:?}");
+                }
+            };
+        }
+
         // TODO: set platform profile based on % of max TDP.
         #[cfg(target_arch = "x86_64")]
         if self.ryzenadj.is_some() {
@@ -103,6 +138,7 @@ impl TDPDevice for Tdp {
                 }
             };
         };
+
         Err(TDPError::FailedOperation(
             "No TDP Interface available to read TDP.".into(),
         ))
@@ -122,6 +158,19 @@ impl TDPDevice for Tdp {
                 }
             };
         };
+
+        if let Some(hwmon) = self.hwmon.as_mut() {
+            match hwmon.set_tdp(value).await {
+                Ok(tdp) => {
+                    log::info!("TDP set to {value}");
+                    return Ok(tdp);
+                }
+                Err(e) => {
+                    log::warn!("Failed to set TDP using hwmon: {e:?}");
+                }
+            };
+        }
+
         #[cfg(target_arch = "x86_64")]
         if self.ryzenadj.is_some() {
             let ryzenadj = self.ryzenadj.as_mut().unwrap();
@@ -135,6 +184,7 @@ impl TDPDevice for Tdp {
                 }
             };
         };
+
         Err(TDPError::FailedOperation(
             "No TDP Interface available to set TDP.".into(),
         ))
@@ -154,6 +204,19 @@ impl TDPDevice for Tdp {
                 }
             };
         };
+
+        if let Some(hwmon) = self.hwmon.as_ref() {
+            match hwmon.boost().await {
+                Ok(boost) => {
+                    log::info!("Boost is currently {boost}");
+                    return Ok(boost);
+                }
+                Err(e) => {
+                    log::warn!("Failed to read current boost using hwmon: {e:?}");
+                }
+            };
+        };
+
         #[cfg(target_arch = "x86_64")]
         if self.ryzenadj.is_some() {
             let ryzenadj = self.ryzenadj.as_ref().unwrap();
@@ -167,6 +230,7 @@ impl TDPDevice for Tdp {
                 }
             };
         };
+
         Err(TDPError::FailedOperation(
             "No TDP Interface available to read boost.".into(),
         ))
@@ -186,6 +250,19 @@ impl TDPDevice for Tdp {
                 }
             };
         };
+
+        if let Some(hwmon) = self.hwmon.as_mut() {
+            match hwmon.set_boost(value).await {
+                Ok(_) => {
+                    log::info!("Boost set to {value}");
+                    return Ok(());
+                }
+                Err(e) => {
+                    log::warn!("Failed to set boost using hwmon: {e:?}");
+                }
+            };
+        };
+
         #[cfg(target_arch = "x86_64")]
         if self.ryzenadj.is_some() {
             let ryzenadj = self.ryzenadj.as_mut().unwrap();
@@ -199,6 +276,7 @@ impl TDPDevice for Tdp {
                 }
             };
         };
+
         Err(TDPError::FailedOperation(
             "No TDP Interface available to set boost.".into(),
         ))
@@ -219,6 +297,7 @@ impl TDPDevice for Tdp {
                 }
             };
         };
+
         Err(TDPError::FailedOperation(
             "No TDP Interface available to read thermal throttle limit.".into(),
         ))
@@ -239,6 +318,7 @@ impl TDPDevice for Tdp {
                 }
             };
         };
+
         Err(TDPError::FailedOperation(
             "No TDP Interface available to set thermal throttle limit.".into(),
         ))
@@ -272,6 +352,7 @@ impl TDPDevice for Tdp {
                 }
             };
         };
+
         Err(TDPError::FailedOperation(
             "No TDP Interface available to read power profile.".into(),
         ))
@@ -305,6 +386,7 @@ impl TDPDevice for Tdp {
                 }
             };
         };
+
         Err(TDPError::FailedOperation(
             "No TDP Interface available to set power profile.".into(),
         ))
@@ -323,6 +405,7 @@ impl TDPDevice for Tdp {
                 }
             };
         };
+
         #[cfg(target_arch = "x86_64")]
         if self.ryzenadj.is_some() {
             let ryzenadj = self.ryzenadj.as_ref().unwrap();
@@ -336,6 +419,7 @@ impl TDPDevice for Tdp {
                 }
             };
         };
+
         Err(TDPError::FailedOperation(
             "No TDP Interface available to list available power profiles.".into(),
         ))
