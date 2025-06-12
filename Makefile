@@ -165,10 +165,13 @@ docker-builder:
 .PHONY: in-docker
 in-docker: docker-builder
 	@# Run the given make target inside Docker
+	mkdir -p $(CACHE_DIR)/home
 	docker run --rm \
 		-v $(PWD):/src \
+		-v $(PWD)/$(CACHE_DIR)/home:/home/build \
 		--workdir /src \
 		-e HOME=/home/build \
+		-e CARGO_HOME=/home/build/.cargo \
 		-e TARGET_ARCH=$(TARGET_ARCH) \
 		-e PKG_CONFIG_SYSROOT_DIR="/usr/$(ARCH)-linux-gnu" \
 		--user $(shell id -u):$(shell id -g) \
