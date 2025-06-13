@@ -4,7 +4,7 @@ use std::{
 };
 use tokio::io::AsyncWriteExt;
 use zbus::fdo;
-use zbus_macros::dbus_interface;
+use zbus_macros::interface;
 
 // Instance of a single CPU core
 #[derive(Debug)]
@@ -42,17 +42,17 @@ impl CPUCore {
     }
 }
 
-#[dbus_interface(name = "org.shadowblip.CPU.Core")]
+#[interface(name = "org.shadowblip.CPU.Core")]
 impl CPUCore {
     // Returns the core number of the CPU core
-    #[dbus_interface(property)]
+    #[zbus(property)]
     pub fn number(&self) -> u32 {
         self.number
     }
 
     // Returns the core ID of the CPU core. This ID will be identical for
     // hyperthread cores.
-    #[dbus_interface(property)]
+    #[zbus(property)]
     pub fn core_id(&self) -> fdo::Result<u32> {
         let path = format!("{0}/topology/core_id", self.path);
         let result = fs::read_to_string(path);
@@ -72,7 +72,7 @@ impl CPUCore {
     }
 
     // Returns true if the given core is online
-    #[dbus_interface(property)]
+    #[zbus(property)]
     pub fn online(&self) -> fdo::Result<bool> {
         if self.number == 0 {
             return Ok(true);
@@ -89,7 +89,7 @@ impl CPUCore {
     }
 
     // Sets the given core to online
-    #[dbus_interface(property)]
+    #[zbus(property)]
     pub fn set_online(&mut self, enabled: bool) -> fdo::Result<()> {
         let enabled_str = if enabled { "enabled" } else { "disabled" };
         log::info!("Setting core {} to {}", self.number, enabled_str);

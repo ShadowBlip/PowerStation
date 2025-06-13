@@ -1,6 +1,6 @@
 use std::fs;
 use zbus::fdo;
-use zbus_macros::dbus_interface;
+use zbus_macros::interface;
 
 /// Represents the data contained in /sys/class/drm/cardX-YYYY
 pub struct Connector {
@@ -8,19 +8,19 @@ pub struct Connector {
     pub path: String,
 }
 
-#[dbus_interface(name = "org.shadowblip.GPU.Card.Connector")]
+#[interface(name = "org.shadowblip.GPU.Card.Connector")]
 impl Connector {
-    #[dbus_interface(property)]
+    #[zbus(property)]
     fn name(&self) -> String {
         self.name.clone()
     }
 
-    #[dbus_interface(property)]
+    #[zbus(property)]
     fn path(&self) -> String {
         self.path.clone()
     }
 
-    #[dbus_interface(property)]
+    #[zbus(property)]
     fn id(&self) -> fdo::Result<u32> {
         let path = format!("{0}/{1}", self.path(), "connector_id");
         let result = fs::read_to_string(path);
@@ -38,7 +38,7 @@ impl Connector {
         Ok(id)
     }
 
-    #[dbus_interface(property)]
+    #[zbus(property)]
     fn enabled(&self) -> fdo::Result<bool> {
         let path = format!("{0}/{1}", self.path(), "enabled");
         let result = fs::read_to_string(path);
@@ -51,7 +51,7 @@ impl Connector {
         Ok(status == "enabled")
     }
 
-    #[dbus_interface(property)]
+    #[zbus(property)]
     fn modes(&self) -> fdo::Result<Vec<String>> {
         let mut modes: Vec<String> = Vec::new();
         let path = format!("{0}/{1}", self.path(), "modes");
@@ -71,7 +71,7 @@ impl Connector {
         Ok(modes)
     }
 
-    #[dbus_interface(property)]
+    #[zbus(property)]
     fn status(&self) -> fdo::Result<String> {
         let path = format!("{0}/{1}", self.path(), "status");
         let result = fs::read_to_string(path);
@@ -84,7 +84,7 @@ impl Connector {
         Ok(status)
     }
 
-    #[dbus_interface(property, name = "DPMS")]
+    #[zbus(property, name = "DPMS")]
     fn dpms(&self) -> fdo::Result<bool> {
         let path = format!("{0}/{1}", self.path(), "dpms");
         let result = fs::read_to_string(path);
