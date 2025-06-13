@@ -1,6 +1,6 @@
 [package]
 name = "powerstation"
-version = "0.5.2"
+version = "0.6.0"
 edition = "2021"
 license = "GPL-3.0-or-later"
 description = "Daemon for controlling TDP and performance over DBus"
