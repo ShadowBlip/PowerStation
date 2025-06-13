@@ -3,7 +3,7 @@ use std::{fs::OpenOptions, io::Write};
 use tokio::fs;
 use zbus::fdo;
 use zbus::zvariant::ObjectPath;
-use zbus_macros::dbus_interface;
+use zbus_macros::interface;
 
 use crate::constants::CPU_PATH;
 use crate::performance::cpu::core::CPUCore;
@@ -57,10 +57,10 @@ impl Cpu {
     }
 }
 
-#[dbus_interface(name = "org.shadowblip.CPU")]
+#[interface(name = "org.shadowblip.CPU")]
 impl Cpu {
     // Returns whether or not boost is enabled
-    #[dbus_interface(property)]
+    #[zbus(property)]
     pub async fn boost_enabled(&self) -> fdo::Result<bool> {
         if !has_feature("cpb".to_string()).await? {
             return Ok(false);
@@ -77,7 +77,7 @@ impl Cpu {
     }
 
     // Set whether or not boost is enabled
-    #[dbus_interface(property)]
+    #[zbus(property)]
     pub async fn set_boost_enabled(&mut self, enabled: bool) -> fdo::Result<()> {
         log::info!("Setting boost enabled to {}", enabled);
         let status = if enabled { "1" } else { "0" };
@@ -97,7 +97,7 @@ impl Cpu {
     }
 
     // Returns whether or not SMT is currently enabled
-    #[dbus_interface(property)]
+    #[zbus(property)]
     pub async fn smt_enabled(&self) -> fdo::Result<bool> {
         if !has_feature("ht".to_string()).await? {
             return Ok(false);
@@ -114,7 +114,7 @@ impl Cpu {
     }
 
     // Set whether or not SMT is enabled
-    #[dbus_interface(property)]
+    #[zbus(property)]
     pub async fn set_smt_enabled(&mut self, enabled: bool) -> fdo::Result<()> {
         log::info!("Setting smt enabled to {}", enabled);
         let status = if enabled { "on" } else { "off" };
@@ -134,18 +134,18 @@ impl Cpu {
     }
 
     // Returns a list of features that the CPU supports
-    #[dbus_interface(property)]
+    #[zbus(property)]
     pub async fn features(&self) -> fdo::Result<Vec<String>> {
         get_features().await
     }
 
     /// Returns the total number of CPU cores detected
-    #[dbus_interface(property)]
+    #[zbus(property)]
     pub async fn cores_count(&self) -> fdo::Result<u32> {
         Ok(self.core_count)
     }
 
-    #[dbus_interface(property)]
+    #[zbus(property)]
     pub async fn cores_enabled(&self) -> fdo::Result<u32> {
         let mut count = 0;
         for core_list in self.core_map.values() {
@@ -159,7 +159,7 @@ impl Cpu {
         Ok(count)
     }
 
-    #[dbus_interface(property)]
+    #[zbus(property)]
     pub async fn set_cores_enabled(&mut self, num: u32) -> fdo::Result<()> {
         log::info!("Setting core count to {}", num);
         if num < 1 {

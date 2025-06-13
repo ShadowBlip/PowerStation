@@ -1,6 +1,6 @@
 use std::sync::Arc;
 use zbus::fdo;
-use zbus_macros::dbus_interface;
+use zbus_macros::interface;
 
 use tokio::sync::Mutex;
 
@@ -29,10 +29,10 @@ impl GPUTDPDBusIface {
     }
 }
 
-#[dbus_interface(name = "org.shadowblip.GPU.Card.TDP")]
+#[interface(name = "org.shadowblip.GPU.Card.TDP")]
 impl GPUTDPDBusIface {
     /// Get the currently set TDP value
-    #[dbus_interface(property, name = "TDP")]
+    #[zbus(property, name = "TDP")]
     async fn tdp(&self) -> fdo::Result<f64> {
         match self.dev.lock().await.tdp().await {
             TDPResult::Ok(result) => Ok(result),
@@ -41,7 +41,7 @@ impl GPUTDPDBusIface {
     }
 
     /// Sets the given TDP value
-    #[dbus_interface(property, name = "TDP")]
+    #[zbus(property, name = "TDP")]
     async fn set_tdp(&mut self, value: f64) -> fdo::Result<()> {
         match self.dev.lock().await.set_tdp(value).await {
             TDPResult::Ok(result) => Ok(result),
@@ -49,7 +49,7 @@ impl GPUTDPDBusIface {
         }
     }
 
-    #[dbus_interface(property)]
+    #[zbus(property)]
     async fn min_tdp(&self) -> fdo::Result<f64> {
         match self.dev.lock().await.min_tdp().await {
             TDPResult::Ok(result) => Ok(result),
@@ -57,7 +57,7 @@ impl GPUTDPDBusIface {
         }
     }
 
-    #[dbus_interface(property)]
+    #[zbus(property)]
     async fn max_tdp(&self) -> fdo::Result<f64> {
         match self.dev.lock().await.max_tdp().await {
             TDPResult::Ok(result) => Ok(result),
@@ -67,7 +67,7 @@ impl GPUTDPDBusIface {
 
     /// The TDP boost for AMD is the total difference between the Fast PPT Limit
     /// and the STAPM limit.
-    #[dbus_interface(property)]
+    #[zbus(property)]
     async fn boost(&self) -> fdo::Result<f64> {
         match self.dev.lock().await.boost().await {
             TDPResult::Ok(result) => Ok(result),
@@ -75,7 +75,7 @@ impl GPUTDPDBusIface {
         }
     }
 
-    #[dbus_interface(property)]
+    #[zbus(property)]
     async fn max_boost(&self) -> fdo::Result<f64> {
         match self.dev.lock().await.max_boost().await {
             TDPResult::Ok(result) => Ok(result),
@@ -83,7 +83,7 @@ impl GPUTDPDBusIface {
         }
     }
 
-    #[dbus_interface(property)]
+    #[zbus(property)]
     async fn set_boost(&mut self, value: f64) -> fdo::Result<()> {
         match self.dev.lock().await.set_boost(value).await {
             TDPResult::Ok(result) => Ok(result),
@@ -91,7 +91,7 @@ impl GPUTDPDBusIface {
         }
     }
 
-    #[dbus_interface(property)]
+    #[zbus(property)]
     async fn thermal_throttle_limit_c(&self) -> fdo::Result<f64> {
         match self.dev.lock().await.thermal_throttle_limit_c().await {
             TDPResult::Ok(result) => Ok(result),
@@ -99,7 +99,7 @@ impl GPUTDPDBusIface {
         }
     }
 
-    #[dbus_interface(property)]
+    #[zbus(property)]
     async fn set_thermal_throttle_limit_c(&mut self, limit: f64) -> fdo::Result<()> {
         match self
             .dev
@@ -113,7 +113,7 @@ impl GPUTDPDBusIface {
         }
     }
 
-    #[dbus_interface(property)]
+    #[zbus(property)]
     async fn power_profile(&self) -> fdo::Result<String> {
         match self.dev.lock().await.power_profile().await {
             TDPResult::Ok(result) => Ok(result),
@@ -121,7 +121,7 @@ impl GPUTDPDBusIface {
         }
     }
 
-    #[dbus_interface(property)]
+    #[zbus(property)]
     async fn set_power_profile(&mut self, profile: String) -> fdo::Result<()> {
         match self.dev.lock().await.set_power_profile(profile).await {
             TDPResult::Ok(result) => Ok(result),
@@ -129,7 +129,7 @@ impl GPUTDPDBusIface {
         }
     }
 
-    #[dbus_interface(property)]
+    #[zbus(property)]
     async fn power_profiles_available(&self) -> fdo::Result<Vec<String>> {
         match self.dev.lock().await.power_profiles_available().await {
             TDPResult::Ok(result) => Ok(result),

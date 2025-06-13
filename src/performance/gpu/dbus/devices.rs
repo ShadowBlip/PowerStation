@@ -8,6 +8,7 @@ use crate::performance::gpu::{
     tdp::{TDPDevice, TDPResult},
 };
 
+#[allow(clippy::large_enum_variant)]
 pub enum TDPDevices {
     Amd(amd::tdp::Tdp),
     Intel(intel::tdp::Tdp),
