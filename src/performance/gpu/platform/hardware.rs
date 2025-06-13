@@ -2,7 +2,7 @@ use crate::performance::gpu::platform::model_config::{Config, ModelConfig};
 use std::collections::HashMap;
 use std::fs;
 use std::io::ErrorKind;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 #[derive(Default, Clone)]
 pub struct Hardware {
@@ -28,9 +28,9 @@ impl Hardware {
         }
     }
 
-    // Internal method to load and apply configurations
+    /// Internal method to load and apply configurations
     fn load_and_apply_configs() -> Result<Self, Box<dyn std::error::Error>> {
-        let platform_dir = Path::new(Self::PLATFORM_DIR);
+        let platform_dir = Self::get_platform_dir();
 
         // Read each database file
         let amd_db_path = platform_dir.join(Self::AMD_APU_DATABASE);
@@ -180,7 +180,7 @@ impl Hardware {
 
     // Helper method to check if a model exists in our configuration
     fn check_model_exists(model: &str) -> Result<bool, Box<dyn std::error::Error>> {
-        let platform_dir = Path::new(Self::PLATFORM_DIR);
+        let platform_dir = Self::get_platform_dir();
 
         // Read each database file
         let amd_db_path = platform_dir.join(Self::AMD_APU_DATABASE);
@@ -203,6 +203,29 @@ impl Hardware {
         }
 
         Ok(false)
+    }
+
+    /// Returns the platform directory with platform configs (e.g.
+    /// "/usr/share/powerstation/platform")
+    fn get_platform_dir() -> PathBuf {
+        let Ok(base_dirs) = xdg::BaseDirectories::with_prefix("powerstation") else {
+            log::warn!("Unable to determine config base path. Using fallback path.");
+            return PathBuf::from(Self::PLATFORM_DIR);
+        };
+        let data_dirs = base_dirs.get_data_dirs();
+        for dir in data_dirs {
+            if !dir.exists() {
+                continue;
+            }
+            let platform_dir = dir.join("platform");
+            if !platform_dir.exists() {
+                continue;
+            }
+
+            return platform_dir;
+        }
+
+        PathBuf::from(Self::PLATFORM_DIR)
     }
 
     pub fn min_tdp(&self) -> f64 {
