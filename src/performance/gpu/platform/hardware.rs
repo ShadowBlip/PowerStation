@@ -208,10 +208,7 @@ impl Hardware {
     /// Returns the platform directory with platform configs (e.g.
     /// "/usr/share/powerstation/platform")
     fn get_platform_dir() -> PathBuf {
-        let Ok(base_dirs) = xdg::BaseDirectories::with_prefix("powerstation") else {
-            log::warn!("Unable to determine config base path. Using fallback path.");
-            return PathBuf::from(Self::PLATFORM_DIR);
-        };
+        let base_dirs = xdg::BaseDirectories::with_prefix("powerstation");
         let data_dirs = base_dirs.get_data_dirs();
         for dir in data_dirs {
             if !dir.exists() {
