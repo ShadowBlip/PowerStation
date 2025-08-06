@@ -1,5 +1,6 @@
-use std::sync::Arc;
+use std::{path::PathBuf, sync::Arc};
 
+use tokio::fs;
 use tokio::sync::Mutex;
 
 use crate::performance::gpu::dbus::devices::TDPDevices;
@@ -43,4 +44,21 @@ pub trait GPUDevice: Send + Sync {
     async fn set_clock_value_mhz_max(&mut self, value: f64) -> GPUResult<()>;
     async fn manual_clock(&self) -> GPUResult<bool>;
     async fn set_manual_clock(&mut self, enabled: bool) -> GPUResult<()>;
+    async fn get_gpu_busy_percent(&self) -> GPUResult<u8> {
+        let path: PathBuf = format!("{0}/{1}", self.path().await, "device/gpu_busy_percent").into();
+        if !path.exists() {
+            return Err(GPUError::FailedOperation(
+                "gpu_busy_percent not supported".to_owned(),
+            ));
+        }
+
+        let percentage = fs::read_to_string(path)
+            .await
+            .map_err(|err| GPUError::IOError(err.to_string()))?;
+
+        percentage
+            .trim()
+            .parse::<u8>()
+            .map_err(|err| GPUError::IOError(err.to_string()))
+    }
 }

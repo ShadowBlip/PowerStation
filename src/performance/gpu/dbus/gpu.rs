@@ -212,6 +212,16 @@ impl GPUDBusInterface {
             .await
             .map_err(|err| err.into())
     }
+
+    #[zbus(property)]
+    async fn gpu_busy_percent(&self) -> fdo::Result<u8> {
+        self.gpu_obj
+            .lock()
+            .await
+            .get_gpu_busy_percent()
+            .await
+            .map_err(|err| err.into())
+    }
 }
 
 /// Used to enumerate all GPU cards over DBus
