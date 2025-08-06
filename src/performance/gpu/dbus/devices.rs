@@ -260,4 +260,11 @@ impl GPUDevices {
             Self::IntelGpu(dev) => dev.set_manual_clock(enabled).await,
         }
     }
+
+    pub async fn get_gpu_busy_percent(&self) -> GPUResult<u8> {
+        match self {
+            Self::AmdGpu(dev) => dev.get_gpu_busy_percent().await,
+            Self::IntelGpu(dev) => dev.get_gpu_busy_percent().await,
+        }
+    }
 }
