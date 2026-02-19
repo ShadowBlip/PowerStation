@@ -6,11 +6,12 @@ use std::{
 
 use tokio::sync::Mutex;
 
-use crate::constants::PREFIX;
 use crate::performance::gpu::{
     dbus::devices::TDPDevices,
+    intel::monitor::IntelMonitorClient,
     interface::{GPUDevice, GPUError, GPUResult},
 };
+use crate::{constants::PREFIX, performance::gpu::intel::monitor::MonitorCommand};
 
 use super::tdp::Tdp;
 
@@ -30,6 +31,7 @@ pub struct IntelGPU {
     pub subvendor_id: String,
     pub revision_id: String,
     pub manual_clock: bool,
+    pub monitor: tokio::sync::mpsc::Sender<MonitorCommand>,
 }
 
 impl GPUDevice for IntelGPU {
@@ -187,5 +189,10 @@ impl GPUDevice for IntelGPU {
     async fn set_manual_clock(&mut self, enabled: bool) -> GPUResult<()> {
         self.manual_clock = enabled;
         Ok(())
+    }
+
+    async fn get_gpu_busy_percent(&self) -> GPUResult<u8> {
+        let busy_percent = self.monitor.get_busy_percentage().await;
+        Ok(busy_percent.round() as u8)
     }
 }

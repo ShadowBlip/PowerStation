@@ -12,6 +12,24 @@ pub enum GPUError {
     IOError(String),
 }
 
+impl From<std::io::Error> for GPUError {
+    fn from(value: std::io::Error) -> Self {
+        Self::IOError(value.to_string())
+    }
+}
+
+impl From<std::num::ParseIntError> for GPUError {
+    fn from(value: std::num::ParseIntError) -> Self {
+        Self::InvalidArgument(value.to_string())
+    }
+}
+
+impl From<std::num::ParseFloatError> for GPUError {
+    fn from(value: std::num::ParseFloatError) -> Self {
+        Self::InvalidArgument(value.to_string())
+    }
+}
+
 impl From<GPUError> for String {
     fn from(_val: GPUError) -> Self {
         todo!()

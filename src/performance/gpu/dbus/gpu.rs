@@ -13,6 +13,7 @@ use crate::performance::gpu::connector::Connector;
 use crate::performance::gpu::dbus::devices::GPUDevices;
 use crate::performance::gpu::dbus::tdp::GPUTDPDBusIface;
 use crate::performance::gpu::intel::intelgpu::IntelGPU;
+use crate::performance::gpu::intel::monitor::{IntelMonitorGPU, MonitorStrategy};
 use crate::performance::gpu::interface::GPUError;
 
 const DRM_PATH: &str = "/sys/class/drm";
@@ -429,6 +430,8 @@ pub async fn get_gpu(path: String) -> Result<GPUDBusInterface, std::io::Error> {
                 subvendor_id,
                 revision_id,
                 manual_clock: true,
+                monitor: IntelMonitorGPU::new(PathBuf::from(&path), MonitorStrategy::default())
+                    .run(),
             })),
         ))
         .await),
