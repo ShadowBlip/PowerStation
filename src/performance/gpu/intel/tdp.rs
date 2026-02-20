@@ -1,5 +1,6 @@
 use std::fs::{self, OpenOptions};
 use std::io::Write;
+use std::path::PathBuf;
 
 use crate::performance::gpu::{
     platform::hardware::Hardware,
@@ -10,6 +11,7 @@ use crate::performance::gpu::{
 pub struct Tdp {
     //pub path: String,
     hardware: Option<Hardware>,
+    base_path: Option<PathBuf>,
 }
 
 impl HardwareAccess for Tdp {
@@ -28,13 +30,49 @@ impl Tdp {
             None => None,
         };
 
-        Tdp { hardware }
+        // Discover the package domain path
+        let mut base_path = None;
+        if let Ok(mut rapl_dir) = fs::read_dir("/sys/class/powercap/intel-rapl") {
+            while let Some(Ok(entry)) = rapl_dir.next() {
+                let Ok(file_type) = entry.file_type() else {
+                    continue;
+                };
+                if !file_type.is_dir() {
+                    continue;
+                }
+                let file_name = entry.file_name();
+                let Some(file_name) = file_name.to_str() else {
+                    continue;
+                };
+                if !file_name.starts_with("intel-rapl:") {
+                    continue;
+                }
+                let domain_path = entry.path();
+                let name_path = domain_path.join("name");
+                let Ok(name) = fs::read_to_string(name_path) else {
+                    continue;
+                };
+                if !name.as_str().trim().starts_with("package") {
+                    continue;
+                }
+                base_path = Some(domain_path);
+                break;
+            }
+        }
+
+        Tdp {
+            hardware,
+            base_path,
+        }
     }
 }
 
 impl TDPDevice for Tdp {
     async fn tdp(&self) -> TDPResult<f64> {
-        let path = "/sys/class/powercap/intel-rapl/intel-rapl:0/constraint_0_power_limit_uw";
+        let Some(base_path) = self.base_path.as_ref() else {
+            return Err(TDPError::FeatureUnsupported);
+        };
+        let path = base_path.join("constraint_0_power_limit_uw");
         let result = fs::read_to_string(path);
         let content = result.map_err(|err| TDPError::IOError(err.to_string()))?;
         let content = content.trim();
@@ -52,6 +90,9 @@ impl TDPDevice for Tdp {
     }
 
     async fn set_tdp(&mut self, value: f64) -> TDPResult<()> {
+        let Some(base_path) = self.base_path.as_ref() else {
+            return Err(TDPError::FeatureUnsupported);
+        };
         if value < 1.0 {
             let err = "Cowardly refusing to set TDP less than 1";
             log::warn!("{}", err);
@@ -67,7 +108,7 @@ impl TDPDevice for Tdp {
         }
 
         // Open the sysfs file to write to
-        let path = "/sys/class/powercap/intel-rapl/intel-rapl:0/constraint_0_power_limit_uw";
+        let path = base_path.join("constraint_0_power_limit_uw");
         let file = OpenOptions::new().write(true).open(path);
 
         // Convert the value to a writable string
@@ -83,7 +124,10 @@ impl TDPDevice for Tdp {
     }
 
     async fn boost(&self) -> TDPResult<f64> {
-        let path = "/sys/class/powercap/intel-rapl/intel-rapl:0/constraint_1_power_limit_uw";
+        let Some(base_path) = self.base_path.as_ref() else {
+            return Err(TDPError::FeatureUnsupported);
+        };
+        let path = base_path.join("constraint_1_power_limit_uw");
         let result = fs::read_to_string(path);
         let content = result.map_err(|err| TDPError::IOError(err.to_string()))?;
         let content = content.trim();
@@ -102,6 +146,9 @@ impl TDPDevice for Tdp {
     }
 
     async fn set_boost(&mut self, value: f64) -> TDPResult<()> {
+        let Some(base_path) = self.base_path.as_ref() else {
+            return Err(TDPError::FeatureUnsupported);
+        };
         log::debug!("Setting Boost: {}", value);
         if value < 0.0 {
             let err = "Cowardly refusing to set TDP Boost less than 0";
@@ -118,7 +165,7 @@ impl TDPDevice for Tdp {
         };
 
         // Write the short tdp
-        let path = "/sys/class/powercap/intel-rapl/intel-rapl:0/constraint_1_power_limit_uw";
+        let path = base_path.join("constraint_1_power_limit_uw");
         let file = OpenOptions::new().write(true).open(path);
         let value = format!("{}", short_tdp);
         file.map_err(|err| TDPError::FailedOperation(err.to_string()))?
