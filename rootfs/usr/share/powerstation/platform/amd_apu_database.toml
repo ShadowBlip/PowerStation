@@ -561,3 +561,9 @@ model_name = "AMD Ryzen 3 8540U w/ Radeon 740M Graphics"
 min_tdp = 5.0
 max_tdp = 30.0
 max_boost = 0.0
+
+[[models]]
+model_name = "AMD RYZEN AI MAX+ 395 w/ Radeon 8060S"
+min_tdp = 5.0
+max_tdp = 55.0
+max_boost = 5.1
