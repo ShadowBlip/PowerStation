@@ -3,6 +3,7 @@ pub mod amd;
 pub mod asus;
 pub mod connector;
 pub mod dbus;
+pub mod drm;
 pub mod intel;
 pub mod interface;
 pub mod platform;

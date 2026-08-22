@@ -12,6 +12,7 @@ use crate::performance::gpu::amd::amdgpu::AmdGpu;
 use crate::performance::gpu::connector::Connector;
 use crate::performance::gpu::dbus::devices::GPUDevices;
 use crate::performance::gpu::dbus::tdp::GPUTDPDBusIface;
+use crate::performance::gpu::drm;
 use crate::performance::gpu::intel::intelgpu::IntelGPU;
 use crate::performance::gpu::intel::monitor::{IntelMonitorGPU, MonitorStrategy};
 use crate::performance::gpu::interface::GPUError;
@@ -316,12 +317,20 @@ pub async fn get_gpu(path: String) -> Result<GPUDBusInterface, std::io::Error> {
     let hw_ids_file = File::open(get_pci_ids_path())?;
     let reader = BufReader::new(hw_ids_file);
 
-    // Set the class based on class ID
-    let class = match class_id.as_str() {
-        "030000" => "integrated",
-        "038000" => "dedicated",
-        _ => "unknown",
+    // Ask the driver what kind of GPU this is, and fall back to guessing from
+    // the PCI class code for the drivers that cannot say. The class code is
+    // only ever a guess: it tells us whether the GPU is the boot VGA device
+    // rather than where it lives.
+    let class = match drm::is_integrated(&path) {
+        Some(true) => "integrated",
+        Some(false) => "dedicated",
+        None => match class_id.as_str() {
+            "030000" => "integrated",
+            "038000" => "dedicated",
+            _ => "unknown",
+        },
     };
+    log::debug!("Card {path} is {class}");
 
     // Lookup the card details by parsing the lines of the file
     let mut vendor: Option<String> = None;
