@@ -26,9 +26,15 @@ impl Cpu {
         let mut core_map: HashMap<u32, Vec<CPUCore>> = HashMap::new();
         let mut cores = get_cores();
 
-        // Ensure SMT is enabled
-        let file = OpenOptions::new().write(true).open(SMT_PATH);
-        let _ = file.unwrap().write_all("on".as_bytes());
+        // Ensure SMT is enabled. Not every kernel exposes this knob and /sys is
+        // not always writable, neither of which is worth dying over.
+        let enable_smt = OpenOptions::new()
+            .write(true)
+            .open(SMT_PATH)
+            .and_then(|mut file| file.write_all("on".as_bytes()));
+        if let Err(e) = enable_smt {
+            log::warn!("Unable to enable SMT: {e}");
+        }
 
         // Ensure all cores are online
         for core in cores.iter_mut() {
