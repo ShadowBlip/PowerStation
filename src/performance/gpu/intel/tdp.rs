@@ -30,9 +30,17 @@ impl Tdp {
             None => None,
         };
 
-        // Discover the package domain path
+        // Discover the package domain path. Prefer the MMIO interface when it
+        // is available, matching Intel thermald's behavior. Some platforms
+        // expose different limits through the MMIO and MSR interfaces.
         let mut base_path = None;
-        if let Ok(mut rapl_dir) = fs::read_dir("/sys/class/powercap/intel-rapl") {
+        for rapl_path in [
+            "/sys/class/powercap/intel-rapl-mmio",
+            "/sys/class/powercap/intel-rapl",
+        ] {
+            let Ok(mut rapl_dir) = fs::read_dir(rapl_path) else {
+                continue;
+            };
             while let Some(Ok(entry)) = rapl_dir.next() {
                 let Ok(file_type) = entry.file_type() else {
                     continue;
@@ -44,7 +52,7 @@ impl Tdp {
                 let Some(file_name) = file_name.to_str() else {
                     continue;
                 };
-                if !file_name.starts_with("intel-rapl:") {
+                if !file_name.starts_with("intel-rapl") {
                     continue;
                 }
                 let domain_path = entry.path();
@@ -55,7 +63,11 @@ impl Tdp {
                 if !name.as_str().trim().starts_with("package") {
                     continue;
                 }
+                log::info!("Using Intel RAPL package domain: {:?}", domain_path);
                 base_path = Some(domain_path);
+                break;
+            }
+            if base_path.is_some() {
                 break;
             }
         }

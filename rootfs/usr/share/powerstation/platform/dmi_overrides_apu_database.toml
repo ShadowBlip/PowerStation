@@ -100,3 +100,9 @@ model_name = "Claw A1M"
 min_tdp = 5.0
 max_tdp = 28.0
 max_boost = 5.0
+
+[[models]]
+model_name = "ONEXPLAYER 3"
+min_tdp = 8.0
+max_tdp = 35.0
+max_boost = 17.0
