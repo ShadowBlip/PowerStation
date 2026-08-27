@@ -1,11 +1,11 @@
-FROM rust:1.86
+FROM rust:1.88
 
 RUN dpkg --add-architecture arm64
 RUN apt-get update && apt-get install -y \
-	cmake \
-	build-essential \
-	libpci-dev \
-	libclang-15-dev
+  cmake \
+  build-essential \
+  libpci-dev \
+  libclang-15-dev
 
 RUN apt-get install -y \
   g++-aarch64-linux-gnu \
