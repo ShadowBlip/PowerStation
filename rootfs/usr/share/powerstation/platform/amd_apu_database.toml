@@ -563,7 +563,97 @@ max_tdp = 30.0
 max_boost = 0.0
 
 [[models]]
-model_name = "AMD RYZEN AI MAX+ 395 w/ Radeon 8060S"
-min_tdp = 5.0
-max_tdp = 55.0
-max_boost = 5.1
+model_name = "AMD Ryzen AI 5 330 w/ Radeon 820M"
+min_tdp = 15.0
+max_tdp = 28.0
+max_boost = 7.0
+
+[[models]]
+model_name = "AMD Ryzen AI 5 340 w/ Radeon 840M"
+min_tdp = 15.0
+max_tdp = 45.0
+max_boost = 9.0
+
+[[models]]
+model_name = "AMD Ryzen AI 5 PRO 340 w/ Radeon 840M"
+min_tdp = 15.0
+max_tdp = 45.0
+max_boost = 9.0
+
+[[models]]
+model_name = "AMD Ryzen AI 7 350 w/ Radeon 860M"
+min_tdp = 15.0
+max_tdp = 45.0
+max_boost = 9.0
+
+[[models]]
+model_name = "AMD Ryzen AI 7 PRO 350 w/ Radeon 860M"
+min_tdp = 15.0
+max_tdp = 45.0
+max_boost = 9.0
+
+[[models]]
+model_name = "AMD Ryzen AI 7 PRO 360 w/ Radeon 880M"
+min_tdp = 15.0
+max_tdp = 54.0
+max_boost = 11.0
+
+[[models]]
+model_name = "AMD Ryzen AI 9 365 w/ Radeon 880M"
+min_tdp = 15.0
+max_tdp = 54.0
+max_boost = 11.0
+
+[[models]]
+model_name = "AMD Ryzen AI 9 HX PRO 370 w/ Radeon 890M"
+min_tdp = 15.0
+max_tdp = 54.0
+max_boost = 16.0
+
+[[models]]
+model_name = "AMD Ryzen AI 9 HX 370 w/ Radeon 890M"
+min_tdp = 15.0
+max_tdp = 54.0
+max_boost = 26.0
+
+[[models]]
+model_name = "AMD Ryzen AI 9 HX PRO 375 w/ Radeon 890M"
+min_tdp = 15.0
+max_tdp = 54.0
+max_boost = 26.0
+
+[[models]]
+model_name = "AMD Ryzen AI 9 HX 375 w/ Radeon 890M"
+min_tdp = 15.0
+max_tdp = 54.0
+max_boost = 26.0
+
+[[models]]
+model_name = "AMD Ryzen AI Max 385 w/ Radeon 8050S"
+min_tdp = 45.0
+max_tdp = 120.0
+max_boost = 15.0
+
+[[models]]
+model_name = "AMD Ryzen AI Max+ 388 w/ Radeon 8060S"
+min_tdp = 45.0
+max_tdp = 120.0
+max_boost = 20.0
+
+[[models]]
+model_name = "AMD Ryzen AI Max 390 w/ Radeon 8050S"
+min_tdp = 45.0
+max_tdp = 130.0
+max_boost = 20.0
+
+[[models]]
+model_name = "AMD Ryzen AI Max+ 392 w/ Radeon 8060S"
+min_tdp = 45.0
+max_tdp = 130.0
+max_boost = 30.0
+
+[[models]]
+model_name = "AMD Ryzen AI Max+ 395 w/ Radeon 8060S"
+min_tdp = 45.0
+max_tdp = 130.0
+max_boost = 30.0
