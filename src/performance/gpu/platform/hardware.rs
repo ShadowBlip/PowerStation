@@ -62,7 +62,7 @@ impl Hardware {
 
         // Find matching model in merged configuration
         for model in &merged_config.models {
-            if model.model_name == current_model {
+            if model.model_name.eq_ignore_ascii_case(&current_model) {
                 hardware.min_tdp = model.min_tdp;
                 hardware.max_tdp = model.max_tdp;
                 hardware.max_boost = model.max_boost;
@@ -197,7 +197,7 @@ impl Hardware {
 
         // Check if model exists in merged config
         for config_model in &merged_config.models {
-            if config_model.model_name == model {
+            if config_model.model_name.eq_ignore_ascii_case(model) {
                 return Ok(true);
             }
         }
