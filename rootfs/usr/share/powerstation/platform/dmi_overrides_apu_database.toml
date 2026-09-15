@@ -106,3 +106,9 @@ model_name = "ONEXPLAYER 3"
 min_tdp = 8.0
 max_tdp = 35.0
 max_boost = 17.0
+
+[[models]]
+model_name = "Desktop (AMD Ryzen AI Max 300 Series)"
+min_tdp = 45.0
+max_tdp = 120.0
+max_boost = 20.0
