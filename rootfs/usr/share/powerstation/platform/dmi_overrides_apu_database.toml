@@ -1,9 +1,11 @@
+# Orange Pi
 [[models]]
 model_name = "NEO-01"
 min_tdp = 8.0
 max_tdp = 28.0
 max_boost = 4.0
 
+#AYANEO
 [[models]]
 model_name = "AIR"
 min_tdp = 5.0
@@ -52,6 +54,7 @@ min_tdp = 5.0
 max_tdp = 28.0
 max_boost = 0.0
 
+# ASUS
 [[models]]
 model_name = "ROG Ally RC71L_RC71L"
 min_tdp = 5.0
@@ -70,7 +73,19 @@ min_tdp = 5.0
 max_tdp = 30.0
 max_boost = 10.0
 
+[[models]]
+model_name = "ROG Xbox Ally RC73YA_RC73YA"
+min_tdp = 5.0
+max_tdp = 30.0
+max_boost = 10.0
 
+[[models]]
+model_name = "ROG Xbox Ally X RC73XA_RC73XA"
+min_tdp = 5.0
+max_tdp = 30.0
+max_boost = 10.0
+
+# GPD
 [[models]]
 model_name = "G1617-01"
 min_tdp = 5.0
@@ -96,13 +111,27 @@ max_tdp = 28.0
 max_boost = 0.0
 
 [[models]]
+model_name = "G1618-04"
+min_tdp = 4.0
+max_tdp = 85.0
+max_boost = 20.0
+
+# MSI
+[[models]]
 model_name = "Claw A1M"
 min_tdp = 5.0
 max_tdp = 28.0
 max_boost = 5.0
 
+# OneXPlayer
 [[models]]
 model_name = "ONEXPLAYER 3"
+min_tdp = 8.0
+max_tdp = 35.0
+max_boost = 17.0
+[[models]]
+
+model_name = "ONEXPLAYER APEX"
 min_tdp = 8.0
 max_tdp = 35.0
 max_boost = 17.0
