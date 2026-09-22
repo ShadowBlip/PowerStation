@@ -1,12 +1,13 @@
 use constants::PREFIX;
+use sd_notify::NotifyState;
 use simple_logger::SimpleLogger;
-use std::{error::Error, future::pending};
+use std::{error::Error, time::Duration};
 use zbus::fdo::ObjectManager;
 use zbus::Connection;
 
 use crate::constants::{BUS_NAME, CPU_PATH, GPU_PATH};
 use crate::dbus::gpu::{get_connectors, get_gpus, GPUBus};
-use crate::performance::{cpu::cpu_features, gpu::dbus};
+use crate::performance::{cpu::cpu_features, fan::FanManager, gpu::dbus};
 
 mod constants;
 mod performance;
@@ -16,6 +17,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
     SimpleLogger::new().init().unwrap();
     const VERSION: &str = env!("CARGO_PKG_VERSION");
     log::info!("Starting PowerStation v{}", VERSION);
+
+    if std::env::args().any(|argument| argument == "--restore-fans-auto") {
+        FanManager::restore_default()?;
+        log::info!("Verified all configured fans in firmware automatic mode");
+        return Ok(());
+    }
 
     // Discover all CPUs
     let cpu = cpu_features::Cpu::new();
@@ -82,13 +89,82 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let gpu_bus = GPUBus::new(gpu_obj_paths);
     connection.object_server().at(GPU_PATH, gpu_bus).await?;
 
+    // Discover configured fans only after an exact DMI match. Ambiguous or
+    // unselected configuration never permits a write. Any initialization error
+    // exits through systemd recovery instead of leaving an unresolved fan fault
+    // behind an otherwise healthy service.
+    let fan_manager = FanManager::discover_default().map_err(|error| {
+        log::error!("Fan control initialization failed: {error}");
+        error
+    })?;
+    // Establish suspend monitoring and its delay inhibitor while every fan is
+    // still in firmware automatic. Saved custom control is restored only after
+    // that protection is ready.
+    let sleep_task = if fan_manager.is_empty() {
+        None
+    } else {
+        Some(fan_manager.spawn_sleep_monitor(connection.clone()).await?)
+    };
+    fan_manager.register(&connection).await?;
+
     // Request a name
     connection.request_name(BUS_NAME).await?;
 
-    // Do other things or go to wait forever
-    pending::<()>().await;
+    if let Err(error) = fan_manager.start().await {
+        log::error!("Fan control started in automatic fallback: {error}");
+        if !fan_manager.automatic_fallback_verified().await {
+            return Err(error.into());
+        }
+    }
+
+    let fan_tasks = fan_manager.spawn_monitor(connection.clone());
+
+    // systemd uses this heartbeat to recover from a hung controller. Its
+    // ExecStopPost helper performs the out-of-process automatic-mode restore.
+    let _ = sd_notify::notify(false, &[NotifyState::Ready]);
+    let watchdog_manager = fan_manager.clone();
+    let watchdog = tokio::spawn(async move {
+        let mut interval = tokio::time::interval(Duration::from_secs(2));
+        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        loop {
+            interval.tick().await;
+            if watchdog_manager.watchdog_healthy(Duration::from_secs(3)) {
+                let _ = sd_notify::notify(false, &[NotifyState::Watchdog]);
+            } else {
+                log::error!("Fan controller heartbeat is stale; withholding systemd watchdog");
+            }
+        }
+    });
+
+    shutdown_signal().await;
+    let _ = sd_notify::notify(false, &[NotifyState::Stopping]);
+    watchdog.abort();
+    for task in fan_tasks {
+        task.abort();
+    }
+    let shutdown_result = fan_manager.shutdown().await;
+    if let Some(task) = sleep_task {
+        task.abort();
+    }
+    shutdown_result?;
 
     Ok(())
+}
+
+async fn shutdown_signal() {
+    #[cfg(unix)]
+    {
+        use tokio::signal::unix::{signal, SignalKind};
+        let mut terminate = signal(SignalKind::terminate()).expect("install SIGTERM handler");
+        tokio::select! {
+            _ = tokio::signal::ctrl_c() => {},
+            _ = terminate.recv() => {},
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = tokio::signal::ctrl_c().await;
+    }
 }
 
 trait TitleCase {
