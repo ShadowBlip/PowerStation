@@ -11,6 +11,7 @@ assets = [
   { source = "rootfs/usr/share/dbus-1/system.d/org.shadowblip.PowerStation.conf", dest = "/usr/share/dbus-1/system.d/org.shadowblip.PowerStation.conf", mode = "644" },
   { source = "rootfs/usr/lib/systemd/system/powerstation.service", dest = "/usr/lib/systemd/system/powerstation.service", mode = "644" },
   { source = "rootfs/usr/share/powerstation/platform/*.toml", dest = "/usr/share/powerstation/platform/", mode = "644" },
+  { source = "rootfs/usr/share/powerstation/platform/*.yaml", dest = "/usr/share/powerstation/platform/", mode = "644" },
 ]
 
 [package.metadata.generate-rpm.requires]
@@ -28,10 +29,17 @@ rog_platform = { git = "https://gitlab.com/asus-linux/asusctl.git", default-feat
 xdg = "3.0.0"
 toml = "0.8.23"
 serde = { version = "1.0.219", features = ["derive"] }
+serde_json = "1.0"
+serde_yaml = { package = "yaml_serde", version = "0.10" }
 udev = { version = "0.9.3", features = ["send", "sync"] }
+futures-util = "0.3"
+sd-notify = "0.4"
 
 [target.'cfg(target_arch = "x86_64")'.dependencies]
 libryzenadj = { git = "https://gitlab.com/shadowapex/libryzenadj-rs.git" }
+
+[dev-dependencies]
+zbus = { version = "5.7.1", default-features = false, features = ["tokio", "p2p"] }
 
 [profile.release]
 debug = false
