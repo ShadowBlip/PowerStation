@@ -90,15 +90,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
     connection.object_server().at(GPU_PATH, gpu_bus).await?;
 
     // Discover configured fans only after an exact DMI match. Ambiguous or
-    // unselected configuration never permits a write; after selection, an
-    // initialization failure may only restore firmware automatic mode.
-    let fan_manager = match FanManager::discover_default() {
-        Ok(manager) => manager,
-        Err(error) => {
-            log::error!("Fan control is unavailable: {error}");
-            FanManager::empty()
-        }
-    };
+    // unselected configuration never permits a write. Any initialization error
+    // exits through systemd recovery instead of leaving an unresolved fan fault
+    // behind an otherwise healthy service.
+    let fan_manager = FanManager::discover_default().map_err(|error| {
+        log::error!("Fan control initialization failed: {error}");
+        error
+    })?;
     // Establish suspend monitoring and its delay inhibitor while every fan is
     // still in firmware automatic. Saved custom control is restored only after
     // that protection is ready.

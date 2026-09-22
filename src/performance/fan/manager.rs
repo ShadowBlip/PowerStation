@@ -61,7 +61,8 @@ pub struct FanManager {
 }
 
 impl FanManager {
-    pub fn empty() -> Self {
+    #[cfg(test)]
+    fn empty() -> Self {
         Self {
             controllers: Vec::new(),
             monitor_health: Arc::new(Vec::new()),
