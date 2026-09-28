@@ -942,7 +942,7 @@ checksum = "439ee305def115ba05938db6eb1644ff94165c5ab5e9420d1c1bcedbba909391"
 
 [[package]]
 name = "powerstation"
-version = "0.8.2"
+version = "0.8.3"
 dependencies = [
  "libc",
  "libryzenadj",
