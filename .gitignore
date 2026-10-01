@@ -1,3 +1,6 @@
 /target
 .cache
 dist
+.direnv
+.envrc
+AGENTS.md
