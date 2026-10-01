@@ -12,6 +12,22 @@ use crate::performance::gpu::{
 const DEV_ID_VANGOGH: &str = "163f";
 const DEV_ID_SEPHIROTH: &str = "1435";
 
+fn ppt_limits(stapm_limit_watts: f64, boost_watts: f64) -> (u32, u32) {
+    let boosted_limit_watts = stapm_limit_watts + boost_watts;
+    let slow_ppt_limit = (boosted_limit_watts * 1000.0) as u32;
+
+    // With no boost allowance, fast PPT must not exceed the requested TDP.
+    // This also matches RyzenAdj-based controllers that apply a strict limit
+    // by writing the same value to STAPM, slow PPT, and fast PPT.
+    let fast_ppt_limit = if boost_watts == 0.0 {
+        slow_ppt_limit
+    } else {
+        (boosted_limit_watts * 1250.0) as u32
+    };
+
+    (slow_ppt_limit, fast_ppt_limit)
+}
+
 /// Implementation of TDP control for AMD GPUs
 pub struct RyzenAdjTdp {
     //pub path: String,
@@ -21,6 +37,9 @@ pub struct RyzenAdjTdp {
     pub unsupported_stapm_limit: f32,
     pub unsupported_ppt_limit_fast: f32,
     pub unsupported_thm_limit: f32,
+    // Preserve an explicit Boost write for the next TDP write. Ryzen SMU
+    // limit readback can briefly lag behind a successful write.
+    requested_boost: Option<f64>,
     // We need Hardware for the TDPDevice trait's default methods
     hardware: Option<Hardware>,
 }
@@ -75,6 +94,7 @@ impl RyzenAdjTdp {
             unsupported_stapm_limit,
             unsupported_ppt_limit_fast,
             unsupported_thm_limit,
+            requested_boost: None,
             hardware,
         })
     }
@@ -293,19 +313,25 @@ impl TDPDevice for RyzenAdjTdp {
             )));
         }
 
-        // Get the current boost value before updating the STAPM limit. We will
-        // use this value to also adjust the Fast PPT Limit.
-        let boost = match self.boost().await {
-            Ok(boost) => boost,
-            Err(e) => return Err(e),
+        // Get the current boost value before updating the STAPM limit. We use
+        // it to keep the slow and fast PPT targets consistent with the request.
+        let boost = match self.requested_boost.take() {
+            Some(boost) => boost,
+            None => match self.boost().await {
+                Ok(boost) => boost,
+                Err(e) => return Err(e),
+            },
         };
 
-        // Update the STAPM limit with the TDP value
+        // Calculate all requested limits before writing STAPM. Some firmware
+        // clamps the STAPM readback below a valid slow/fast PPT request.
         let limit: u32 = (value * 1000.0) as u32;
-        RyzenAdjTdp::set_stapm_limit(self, limit).map_err(TDPError::FailedOperation)?;
+        let (slow_ppt_limit, fast_ppt_limit) = ppt_limits(value, boost);
 
-        // Update the s/fppt values with the new TDP
-        self.set_boost(boost).await?;
+        // Update STAPM and the slow/fast PPT limits as one logical operation.
+        RyzenAdjTdp::set_stapm_limit(self, limit).map_err(TDPError::FailedOperation)?;
+        RyzenAdjTdp::set_ppt_limit_slow(self, slow_ppt_limit).map_err(TDPError::FailedOperation)?;
+        RyzenAdjTdp::set_ppt_limit_fast(self, fast_ppt_limit).map_err(TDPError::FailedOperation)?;
 
         Ok(())
     }
@@ -340,13 +366,18 @@ impl TDPDevice for RyzenAdjTdp {
         let stapm_limit =
             RyzenAdjTdp::get_stapm_limit(self).map_err(TDPError::FailedOperation)? as f64;
 
+        let (slow_ppt_limit, fast_ppt_limit) = ppt_limits(stapm_limit, value);
+
         // Set the new slow PPT limit
-        let slow_ppt_limit = ((stapm_limit + value) * 1000.0) as u32;
         RyzenAdjTdp::set_ppt_limit_slow(self, slow_ppt_limit).map_err(TDPError::FailedOperation)?;
 
         // Set the new fast PPT limit
-        let fast_ppt_limit = ((stapm_limit + value) * 1250.0) as u32;
         RyzenAdjTdp::set_ppt_limit_fast(self, fast_ppt_limit).map_err(TDPError::FailedOperation)?;
+
+        // The SMU may not report the new limits immediately. Retain the
+        // caller's exact value for a following TDP write instead of deriving
+        // it from potentially stale slow-PPT and STAPM readback.
+        self.requested_boost = Some(value);
 
         Ok(())
     }
@@ -381,5 +412,20 @@ impl TDPDevice for RyzenAdjTdp {
             "max-performance".to_string(),
             "power-saving".to_string(),
         ])
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ppt_limits;
+
+    #[test]
+    fn zero_boost_keeps_slow_and_fast_ppt_at_tdp() {
+        assert_eq!(ppt_limits(15.0, 0.0), (15_000, 15_000));
+    }
+
+    #[test]
+    fn positive_boost_preserves_existing_ppt_behavior() {
+        assert_eq!(ppt_limits(15.0, 5.0), (20_000, 25_000));
     }
 }

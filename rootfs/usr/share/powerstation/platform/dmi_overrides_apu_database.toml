@@ -76,13 +76,13 @@ max_boost = 10.0
 [[models]]
 model_name = "ROG Xbox Ally RC73YA_RC73YA"
 min_tdp = 5.0
-max_tdp = 20.0
+max_tdp = 30.0
 max_boost = 10.0
 
 [[models]]
 model_name = "ROG Xbox Ally X RC73XA_RC73XA"
 min_tdp = 5.0
-max_tdp = 35.0
+max_tdp = 30.0
 max_boost = 10.0
 
 # GPD
