@@ -13,10 +13,10 @@
 
 ## About
 
-PowerStation is an open source TDP control and performance daemon for Linux that 
-can be used to control CPU and GPU settings for better performance and battery
+PowerStation is an open source TDP control and performance daemon for Linux that
+can be used to control CPU, GPU, and supported system-fan settings for better performance and battery
 life. Performance control is done through [DBus](https://www.freedesktop.org/wiki/Software/dbus/)
-to provide a UI-agnostic interface to CPU and GPU settings.
+to provide a UI-agnostic interface.
 
 ## Install
 
@@ -51,6 +51,9 @@ Individual interface documentation can be found here:
 * [org.shadowblip.GPU](./docs/gpu.md)
 * [org.shadowblip.GPU.Card](./docs/gpu-card.md)
 * [org.shadowblip.GPU.Card.Connector](./docs/gpu-card-connector.md)
+* [org.shadowblip.Fan](./docs/fan.md)
+* [org.shadowblip.Fan.Device](./docs/fan-device.md)
+* [Fan platform YAML](./docs/fan-platform-yaml.md)
 
 ## Usage
 
@@ -81,14 +84,16 @@ busctl tree org.shadowblip.PowerStation
       │ ├─ /org/shadowblip/Performance/CPU/Core7
       │ ├─ /org/shadowblip/Performance/CPU/Core8
       │ └─ /org/shadowblip/Performance/CPU/Core9
-      └─ /org/shadowblip/Performance/GPU
-        ├─ /org/shadowblip/Performance/GPU/Card1
-        │ └─ /org/shadowblip/Performance/GPU/Card1/HDMI
-        │   └─ /org/shadowblip/Performance/GPU/Card1/HDMI/A
-        │     └─ /org/shadowblip/Performance/GPU/Card1/HDMI/A/1
-        └─ /org/shadowblip/Performance/GPU/Card2
-          └─ /org/shadowblip/Performance/GPU/Card2/eDP
-            └─ /org/shadowblip/Performance/GPU/Card2/eDP/1
+      ├─ /org/shadowblip/Performance/GPU
+      │ ├─ /org/shadowblip/Performance/GPU/Card1
+      │ │ └─ /org/shadowblip/Performance/GPU/Card1/HDMI
+      │ │   └─ /org/shadowblip/Performance/GPU/Card1/HDMI/A
+      │ │     └─ /org/shadowblip/Performance/GPU/Card1/HDMI/A/1
+      │ └─ /org/shadowblip/Performance/GPU/Card2
+      │   └─ /org/shadowblip/Performance/GPU/Card2/eDP
+      │     └─ /org/shadowblip/Performance/GPU/Card2/eDP/1
+      └─ /org/shadowblip/Performance/Fan
+        └─ /org/shadowblip/Performance/Fan/Fan0
 ```
 
 ```bash

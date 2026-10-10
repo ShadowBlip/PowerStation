@@ -113,6 +113,7 @@ dist/$(NAME)-$(VERSION)-1.$(ARCH).rpm: target/$(TARGET_ARCH)/release/$(NAME)
 
 INTROSPECT_CARD ?= Card2
 INTROSPECT_CONNECTOR ?= eDP/1
+INTROSPECT_FAN ?= Fan0
 .PHONY: introspect
 introspect: ## Generate DBus XML
 	echo "Generating DBus XML spec..."
@@ -130,6 +131,12 @@ introspect: ## Generate DBus XML
 	xmlstarlet ed -L -d '//node[@name]' bindings/dbus-xml/org-shadowblip-gpu-card.xml
 	busctl introspect org.shadowblip.PowerStation \
 		/org/shadowblip/Performance/GPU/Card2/$(INTROSPECT_CONNECTOR) --xml-interface > bindings/dbus-xml/org-shadowblip-gpu-card-connector.xml
+	busctl introspect org.shadowblip.PowerStation \
+		/org/shadowblip/Performance/Fan --xml-interface > bindings/dbus-xml/org-shadowblip-fan.xml
+	xmlstarlet ed -L -d '//node[@name]' bindings/dbus-xml/org-shadowblip-fan.xml
+	busctl introspect org.shadowblip.PowerStation \
+		/org/shadowblip/Performance/Fan/$(INTROSPECT_FAN) --xml-interface > bindings/dbus-xml/org-shadowblip-fan-device.xml
+	xmlstarlet ed -L -d '//node[@name]' bindings/dbus-xml/org-shadowblip-fan-device.xml
 
 XSL_TEMPLATE := ./docs/dbus2markdown.xsl
 .PHONY: docs
@@ -150,6 +157,12 @@ docs: ## Generate markdown docs for DBus interfaces
 	xsltproc --novalid -o docs/gpu-card-connector.md $(XSL_TEMPLATE) bindings/dbus-xml/org-shadowblip-gpu-card-connector.xml
 	mdformat ./docs/gpu-card-connector.md
 	sed -i 's/DBus Interface API/GPU.Card.Connector DBus Interface API/g' ./docs/gpu-card-connector.md
+	xsltproc --novalid -o docs/fan.md $(XSL_TEMPLATE) bindings/dbus-xml/org-shadowblip-fan.xml
+	mdformat ./docs/fan.md
+	sed -i 's/DBus Interface API/Fan DBus Interface API/g' ./docs/fan.md
+	xsltproc --novalid -o docs/fan-device.md $(XSL_TEMPLATE) bindings/dbus-xml/org-shadowblip-fan-device.xml
+	mdformat ./docs/fan-device.md
+	sed -i 's/DBus Interface API/Fan.Device DBus Interface API/g' ./docs/fan-device.md
 
 # Refer to .releaserc.yaml for release configuration
 .PHONY: sem-release 

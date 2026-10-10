@@ -1,0 +1,84 @@
+<?xml version="1.0"?>
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
+ "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<node>
+  <interface name="org.freedesktop.DBus.Properties">
+    <method name="Get">
+      <arg name="interface_name" type="s" direction="in"/>
+      <arg name="property_name" type="s" direction="in"/>
+      <arg type="v" direction="out"/>
+    </method>
+    <method name="Set">
+      <arg name="interface_name" type="s" direction="in"/>
+      <arg name="property_name" type="s" direction="in"/>
+      <arg name="value" type="v" direction="in"/>
+    </method>
+    <method name="GetAll">
+      <arg name="interface_name" type="s" direction="in"/>
+      <arg type="a{sv}" direction="out"/>
+    </method>
+    <signal name="PropertiesChanged">
+      <arg name="interface_name" type="s"/>
+      <arg name="changed_properties" type="a{sv}"/>
+      <arg name="invalidated_properties" type="as"/>
+    </signal>
+  </interface>
+  <interface name="org.freedesktop.DBus.Introspectable">
+    <method name="Introspect">
+      <arg type="s" direction="out"/>
+    </method>
+  </interface>
+  <interface name="org.freedesktop.DBus.Peer">
+    <method name="Ping">
+    </method>
+    <method name="GetMachineId">
+      <arg type="s" direction="out"/>
+    </method>
+  </interface>
+  <interface name="org.shadowblip.Fan.Device">
+    <method name="SetAutomatic">
+    </method>
+    <method name="SetManual">
+      <arg name="percent" type="y" direction="in"/>
+    </method>
+    <method name="SetCurve">
+      <arg name="points" type="a(dy)" direction="in"/>
+    </method>
+    <method name="ApplyPreset">
+      <arg name="name" type="s" direction="in"/>
+    </method>
+    <property name="ActivePreset" type="s" access="read"/>
+    <property name="ApiVersion" type="u" access="read"/>
+    <property name="AutomaticVerified" type="b" access="read"/>
+    <property name="AvailableModes" type="as" access="read"/>
+    <property name="Backend" type="s" access="read"/>
+    <property name="Controlling" type="b" access="read"/>
+    <property name="Curve" type="a(dy)" access="read"/>
+    <property name="CurvePointCount" type="q" access="read"/>
+    <property name="EffectivePercent" type="n" access="read"/>
+    <property name="EmergencyHandoffTemperatureC" type="d" access="read"/>
+    <property name="Fault" type="s" access="read"/>
+    <property name="FullSpeedTemperatureC" type="d" access="read"/>
+    <property name="Id" type="s" access="read"/>
+    <property name="ManualPercent" type="y" access="read"/>
+    <property name="MaximumValidRpm" type="u" access="read"/>
+    <property name="MaximumValidTemperatureC" type="d" access="read"/>
+    <property name="MinimumPercent" type="y" access="read"/>
+    <property name="MinimumRunningPercent" type="y" access="read"/>
+    <property name="MinimumValidTemperatureC" type="d" access="read"/>
+    <property name="Mode" type="s" access="read"/>
+    <property name="Name" type="s" access="read"/>
+    <property name="Presets" type="as" access="read"/>
+    <property name="PwmMax" type="u" access="read"/>
+    <property name="PwmMin" type="u" access="read"/>
+    <property name="PwmReadbackTolerance" type="u" access="read"/>
+    <property name="RestartTemperatureC" type="d" access="read"/>
+    <property name="Rpm" type="u" access="read"/>
+    <property name="StallGraceSeconds" type="u" access="read"/>
+    <property name="StallRpm" type="u" access="read"/>
+    <property name="StopTemperatureC" type="d" access="read"/>
+    <property name="Suspended" type="b" access="read"/>
+    <property name="TelemetryValid" type="b" access="read"/>
+    <property name="TemperatureC" type="d" access="read"/>
+  </interface>
+</node>
