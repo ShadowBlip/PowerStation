@@ -111,7 +111,7 @@ max_tdp = 28.0
 max_boost = 0.0
 
 [[models]]
-model_name = "G1618-04"
+model_name = "G1618-05"
 min_tdp = 4.0
 max_tdp = 85.0
 max_boost = 20.0
@@ -135,6 +135,18 @@ model_name = "ONEXPLAYER APEX"
 min_tdp = 8.0
 max_tdp = 35.0
 max_boost = 17.0
+
+[[models]]
+model_name = "ONEXPLAYER SUPER X"
+min_tdp = 8.0
+max_tdp = 80.0
+max_boost = 20.0
+
+[[models]]
+model_name = "ONEXPLAYER X1Pro"
+min_tdp = 4.0
+max_tdp = 30.0
+max_boost = 5.0
 
 # Framework Desktop
 [[models]]
