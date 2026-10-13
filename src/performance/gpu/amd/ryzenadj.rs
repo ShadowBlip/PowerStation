@@ -12,22 +12,6 @@ use crate::performance::gpu::{
 const DEV_ID_VANGOGH: &str = "163f";
 const DEV_ID_SEPHIROTH: &str = "1435";
 
-fn ppt_limits(stapm_limit_watts: f64, boost_watts: f64) -> (u32, u32) {
-    let boosted_limit_watts = stapm_limit_watts + boost_watts;
-    let slow_ppt_limit = (boosted_limit_watts * 1000.0) as u32;
-
-    // With no boost allowance, fast PPT must not exceed the requested TDP.
-    // This also matches RyzenAdj-based controllers that apply a strict limit
-    // by writing the same value to STAPM, slow PPT, and fast PPT.
-    let fast_ppt_limit = if boost_watts == 0.0 {
-        slow_ppt_limit
-    } else {
-        (boosted_limit_watts * 1250.0) as u32
-    };
-
-    (slow_ppt_limit, fast_ppt_limit)
-}
-
 /// Implementation of TDP control for AMD GPUs
 pub struct RyzenAdjTdp {
     //pub path: String,
@@ -39,7 +23,7 @@ pub struct RyzenAdjTdp {
     pub unsupported_thm_limit: f32,
     // Preserve an explicit Boost write for the next TDP write. Ryzen SMU
     // limit readback can briefly lag behind a successful write.
-    requested_boost: Option<f64>,
+    boost_target: Option<f64>,
     // We need Hardware for the TDPDevice trait's default methods
     hardware: Option<Hardware>,
 }
@@ -94,7 +78,7 @@ impl RyzenAdjTdp {
             unsupported_stapm_limit,
             unsupported_ppt_limit_fast,
             unsupported_thm_limit,
-            requested_boost: None,
+            boost_target: None,
             hardware,
         })
     }
@@ -315,7 +299,7 @@ impl TDPDevice for RyzenAdjTdp {
 
         // Get the current boost value before updating the STAPM limit. We use
         // it to keep the slow and fast PPT targets consistent with the request.
-        let boost = match self.requested_boost.take() {
+        let boost = match self.boost_target.take() {
             Some(boost) => boost,
             None => match self.boost().await {
                 Ok(boost) => boost,
@@ -323,8 +307,9 @@ impl TDPDevice for RyzenAdjTdp {
             },
         };
 
-        // Calculate all requested limits before writing STAPM. Some firmware
-        // clamps the STAPM readback below a valid slow/fast PPT request.
+        // Compute PPT limits from the requested TDP. Firmware may clamp STAPM
+        // to a lower value, so using STAPM readback after the write would also
+        // lower the slow/fast PPT targets.
         let limit: u32 = (value * 1000.0) as u32;
         let (slow_ppt_limit, fast_ppt_limit) = ppt_limits(value, boost);
 
@@ -377,7 +362,7 @@ impl TDPDevice for RyzenAdjTdp {
         // The SMU may not report the new limits immediately. Retain the
         // caller's exact value for a following TDP write instead of deriving
         // it from potentially stale slow-PPT and STAPM readback.
-        self.requested_boost = Some(value);
+        self.boost_target = Some(value);
 
         Ok(())
     }
@@ -413,6 +398,22 @@ impl TDPDevice for RyzenAdjTdp {
             "power-saving".to_string(),
         ])
     }
+}
+
+fn ppt_limits(stapm_limit_watts: f64, boost_watts: f64) -> (u32, u32) {
+    let boosted_limit_watts = stapm_limit_watts + boost_watts;
+    let slow_ppt_limit = (boosted_limit_watts * 1000.0) as u32;
+
+    // With no boost allowance, fast PPT must not exceed the requested TDP.
+    // This also matches RyzenAdj-based controllers that apply a strict limit
+    // by writing the same value to STAPM, slow PPT, and fast PPT.
+    let fast_ppt_limit = if boost_watts == 0.0 {
+        slow_ppt_limit
+    } else {
+        (boosted_limit_watts * 1250.0) as u32
+    };
+
+    (slow_ppt_limit, fast_ppt_limit)
 }
 
 #[cfg(test)]
