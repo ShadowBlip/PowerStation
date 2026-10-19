@@ -1,10 +1,12 @@
-use super::config::{load_databases, read_device_tree, select_device, DmiInfo, FanConfig};
-use super::controller::{restore_automatic_for_config, ControllerError, FanController};
+use super::config::{
+    load_databases, read_device_tree, select_device, DeviceConfig, DmiInfo, FanConfig,
+};
+use super::controller::{restore_automatic_for_config, FanController};
 use super::dbus::{FanBus, FanDevice, FanSensor};
 use super::profile::{load_profile, Profile};
+use super::FanError;
 use crate::constants::FAN_PATH;
 use futures_util::{FutureExt, StreamExt};
-use std::fmt::{Display, Formatter};
 use std::panic::AssertUnwindSafe;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -21,23 +23,6 @@ const DEFAULT_DEVICE_TREE_PATH: &str = "/proc/device-tree/compatible";
 const DEFAULT_SYSFS_ROOT: &str = "/sys";
 const PLATFORM_DIR_ENV: &str = "POWERSTATION_FAN_PLATFORM_DIR";
 const SYSFS_ROOT_ENV: &str = "POWERSTATION_FAN_SYSFS_ROOT";
-
-#[derive(Debug)]
-pub struct ManagerError(pub String);
-
-impl Display for ManagerError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
-    }
-}
-
-impl std::error::Error for ManagerError {}
-
-impl From<ControllerError> for ManagerError {
-    fn from(value: ControllerError) -> Self {
-        Self(value.to_string())
-    }
-}
 
 #[proxy(
     interface = "org.freedesktop.login1.Manager",
@@ -70,7 +55,6 @@ pub struct FanManager {
 }
 
 impl FanManager {
-    #[cfg(test)]
     fn empty() -> Self {
         Self {
             profile: Arc::new(Mutex::new(None)),
@@ -81,7 +65,7 @@ impl FanManager {
         }
     }
 
-    pub fn discover_default() -> Result<Self, ManagerError> {
+    pub fn discover_default() -> Result<Self, FanError> {
         Self::discover(
             platform_directory(),
             configured_path(SYSFS_ROOT_ENV, DEFAULT_SYSFS_ROOT),
@@ -93,26 +77,10 @@ impl FanManager {
         platform_dir: PathBuf,
         sysfs_root: PathBuf,
         device_tree_path: PathBuf,
-    ) -> Result<Self, ManagerError> {
-        let devices =
-            load_databases(&platform_dir).map_err(|error| ManagerError(error.to_string()))?;
-        let dmi = DmiInfo::read(&sysfs_root);
-        let Some(device) = select_device(
-            &devices,
-            &dmi,
-            &read_device_tree(&device_tree_path)
-                .map_err(|error| ManagerError(error.to_string()))?,
-        )
-        .map_err(|error| ManagerError(error.to_string()))?
-        else {
+    ) -> Result<Self, FanError> {
+        let Some(device) = matched_device(&platform_dir, &sysfs_root, &device_tree_path)? else {
             log::info!("No fan platform configuration matches this system");
-            return Ok(Self {
-                profile: Arc::new(Mutex::new(None)),
-                controllers: Vec::new(),
-                monitor_health: Arc::new(Vec::new()),
-                sleep_monitor_healthy: Arc::new(AtomicBool::new(true)),
-                custom_control_allowed: Arc::new(AtomicBool::new(false)),
-            });
+            return Ok(Self::empty());
         };
         log::info!(
             "Matched fan platform configuration {} ({})",
@@ -184,23 +152,22 @@ impl FanManager {
         (loaded.profile.name.clone(), loaded.path.clone())
     }
 
-    pub async fn load_profile_fd(&self, fd: OwnedFd) -> Result<(), ManagerError> {
+    pub async fn load_profile_fd(&self, fd: OwnedFd) -> Result<(), FanError> {
         let (profile, path) = tokio::task::spawn_blocking(move || {
             let file = std::fs::File::from(std::os::fd::OwnedFd::from(fd));
             load_profile(&file)
         })
         .await
-        .map_err(|error| ManagerError(error.to_string()))?
-        .map_err(|error| ManagerError(error.to_string()))?;
+        .map_err(FanError::new)??;
         self.apply_profile(profile, path).await
     }
 
-    pub async fn load_profile_json(&self, json: &str) -> Result<(), ManagerError> {
-        let profile = Profile::from_json(json).map_err(|error| ManagerError(error.to_string()))?;
+    pub async fn load_profile_json(&self, json: &str) -> Result<(), FanError> {
+        let profile = Profile::from_json(json)?;
         self.apply_profile(profile, String::new()).await
     }
 
-    async fn apply_profile(&self, profile: Profile, path: String) -> Result<(), ManagerError> {
+    async fn apply_profile(&self, profile: Profile, path: String) -> Result<(), FanError> {
         // Serialize complete transactions and metadata. Always take controller
         // locks in platform order, then validate every fan before any write.
         let mut loaded = self.profile.lock().await;
@@ -209,7 +176,7 @@ impl FanManager {
             controllers.push(controller.lock().await);
         }
         if profile.fans.len() != controllers.len() || controllers.is_empty() {
-            return Err(ManagerError(
+            return Err(FanError(
                 "profile must specify every enumerated fan exactly once".into(),
             ));
         }
@@ -219,7 +186,7 @@ impl FanManager {
                 .iter()
                 .find(|entry| entry.fan == controller.id())
                 .ok_or_else(|| {
-                    ManagerError(format!("missing fan {} or unknown fan ID", controller.id()))
+                    FanError(format!("missing fan {} or unknown fan ID", controller.id()))
                 })?;
             controller.validate_selection(entry)?;
         }
@@ -239,7 +206,7 @@ impl FanManager {
                     }
                 }
                 *loaded = None;
-                return Err(ManagerError(errors.join("; ")));
+                return Err(FanError(errors.join("; ")));
             }
         }
         *loaded = Some(LoadedProfile { profile, path });
@@ -248,23 +215,27 @@ impl FanManager {
 
     pub async fn emit_changes(&self, connection: &Connection) {
         for (path, _) in &self.controllers {
-            if let Ok(interface) = connection
-                .object_server()
-                .interface::<_, FanDevice>(path.as_str())
-                .await
-            {
-                if let Err(error) = interface
-                    .get()
-                    .await
-                    .emit_all_changes(interface.signal_emitter())
-                    .await
-                {
-                    log::error!("Unable to emit fan changes: {error}");
-                }
-            }
-            self.emit_sensor_changes(connection, path).await;
+            self.emit_fan_changes(connection, path).await;
         }
         self.emit_profile_changes(connection).await;
+    }
+
+    async fn emit_fan_changes(&self, connection: &Connection, path: &str) {
+        match connection
+            .object_server()
+            .interface::<_, FanDevice>(path)
+            .await
+        {
+            Ok(interface) => {
+                let device = interface.get().await;
+                if let Err(error) = device.emit_all_changes(interface.signal_emitter()).await {
+                    log::error!("Unable to emit fan property changes at {path}: {error}");
+                }
+                drop(device);
+                self.emit_sensor_changes(connection, path).await;
+            }
+            Err(error) => log::error!("Unable to access fan D-Bus object {path}: {error}"),
+        }
     }
 
     async fn emit_profile_changes(&self, connection: &Connection) {
@@ -312,11 +283,11 @@ impl FanManager {
         self.controllers.is_empty()
     }
 
-    pub async fn start(&self) -> Result<(), ManagerError> {
+    pub async fn start(&self) -> Result<(), FanError> {
         let protected = self.sleep_monitor_healthy.load(Ordering::Acquire);
         self.custom_control_allowed.store(false, Ordering::Release);
         if !protected {
-            return Err(ManagerError(
+            return Err(FanError(
                 "fan sleep protection is unavailable at startup".into(),
             ));
         }
@@ -344,7 +315,7 @@ impl FanManager {
                 && self.automatic_fallback_verified().await,
             Ordering::Release,
         );
-        Err(ManagerError(errors.join("; ")))
+        Err(FanError(errors.join("; ")))
     }
 
     pub async fn automatic_fallback_verified(&self) -> bool {
@@ -356,13 +327,13 @@ impl FanManager {
         true
     }
 
-    pub async fn register(&self, connection: &Connection) -> Result<(), ManagerError> {
+    pub async fn register(&self, connection: &Connection) -> Result<(), FanError> {
         for (path, controller) in &self.controllers {
             connection
                 .object_server()
                 .at(path.clone(), FanDevice::new(Arc::clone(controller)))
                 .await
-                .map_err(|error| ManagerError(error.to_string()))?;
+                .map_err(FanError::new)?;
             let sensors = controller.lock().await.config.temperature_sources.clone();
             for (index, sensor) in sensors.iter().enumerate() {
                 connection
@@ -376,14 +347,14 @@ impl FanManager {
                         ),
                     )
                     .await
-                    .map_err(|error| ManagerError(error.to_string()))?;
+                    .map_err(FanError::new)?;
             }
         }
         connection
             .object_server()
             .at(FAN_PATH, FanBus::new(self.clone()))
             .await
-            .map_err(|error| ManagerError(error.to_string()))?;
+            .map_err(FanError::new)?;
         Ok(())
     }
 
@@ -422,27 +393,7 @@ impl FanManager {
                             );
                         }
                         manager.emit_profile_changes(&connection).await;
-                        match connection
-                            .object_server()
-                            .interface::<_, FanDevice>(path.as_str())
-                            .await
-                        {
-                            Ok(interface) => {
-                                let device = interface.get().await;
-                                if let Err(error) =
-                                    device.emit_all_changes(interface.signal_emitter()).await
-                                {
-                                    log::error!(
-                                        "Unable to emit fan property changes at {path}: {error}"
-                                    );
-                                }
-                                drop(device);
-                                manager.emit_sensor_changes(&connection, &path).await;
-                            }
-                            Err(error) => {
-                                log::error!("Unable to access fan D-Bus object {path}: {error}");
-                            }
-                        }
+                        manager.emit_fan_changes(&connection, &path).await;
                     }
                 })
             })
@@ -465,7 +416,7 @@ impl FanManager {
     pub async fn spawn_sleep_monitor(
         &self,
         connection: Connection,
-    ) -> Result<JoinHandle<()>, ManagerError> {
+    ) -> Result<JoinHandle<()>, FanError> {
         let manager = self.clone();
         let (ready_tx, ready_rx) = oneshot::channel();
         let handle = tokio::spawn(async move {
@@ -488,14 +439,14 @@ impl FanManager {
         });
         match ready_rx.await {
             Ok(Ok(())) => Ok(handle),
-            Ok(Err(error)) => Err(ManagerError(error)),
-            Err(_) => Err(ManagerError(
+            Ok(Err(error)) => Err(FanError(error)),
+            Err(_) => Err(FanError(
                 "fan sleep monitor stopped before initialization".into(),
             )),
         }
     }
 
-    pub async fn shutdown(&self) -> Result<(), ManagerError> {
+    pub async fn shutdown(&self) -> Result<(), FanError> {
         self.custom_control_allowed.store(false, Ordering::Release);
         let mut errors = Vec::new();
         for (_, controller) in &self.controllers {
@@ -506,14 +457,14 @@ impl FanManager {
         if errors.is_empty() {
             Ok(())
         } else {
-            Err(ManagerError(format!(
+            Err(FanError(format!(
                 "failed to restore all fans to automatic: {}",
                 errors.join("; ")
             )))
         }
     }
 
-    pub fn restore_default() -> Result<(), ManagerError> {
+    pub fn restore_default() -> Result<(), FanError> {
         let platform_dir = platform_directory();
         let sysfs_root = configured_path(SYSFS_ROOT_ENV, DEFAULT_SYSFS_ROOT);
         Self::restore_all(
@@ -528,24 +479,15 @@ impl FanManager {
         platform_dir: &Path,
         sysfs_root: &Path,
         device_tree_path: &Path,
-    ) -> Result<(), ManagerError> {
-        let devices =
-            load_databases(platform_dir).map_err(|error| ManagerError(error.to_string()))?;
-        let dmi = DmiInfo::read(sysfs_root);
-        let Some(device) = select_device(
-            &devices,
-            &dmi,
-            &read_device_tree(device_tree_path).map_err(|error| ManagerError(error.to_string()))?,
-        )
-        .map_err(|error| ManagerError(error.to_string()))?
-        else {
+    ) -> Result<(), FanError> {
+        let Some(device) = matched_device(platform_dir, sysfs_root, device_tree_path)? else {
             return Ok(());
         };
         let errors = restore_configurations(sysfs_root, &device.fans);
         if errors.is_empty() {
             Ok(())
         } else {
-            Err(ManagerError(errors.join("; ")))
+            Err(FanError(errors.join("; ")))
         }
     }
 
@@ -553,62 +495,40 @@ impl FanManager {
         &self,
         connection: Connection,
         ready: oneshot::Sender<Result<(), String>>,
-    ) -> Result<(), ManagerError> {
+    ) -> Result<(), FanError> {
         // logind's GetAll can fail on unrelated properties such as bootloader
         // entries. Read only the inhibitor budget; sleep events are signals.
-        let proxy = match LoginManagerProxy::builder(&connection)
-            .cache_properties(zbus::proxy::CacheProperties::No)
-            .build()
-            .await
-        {
-            Ok(proxy) => proxy,
-            Err(error) => {
-                let error = ManagerError(error.to_string());
-                let _ = ready.send(Err(error.to_string()));
-                return Err(error);
-            }
-        };
-        let mut owner_changes = match proxy.inner().receive_owner_changed().await {
-            Ok(owner_changes) => owner_changes,
-            Err(error) => {
-                let _ = ready.send(Err(error.to_string()));
-                return Err(ManagerError(error.to_string()));
-            }
-        };
-        let mut signals = match proxy.receive_prepare_for_sleep().await {
-            Ok(signals) => signals,
-            Err(error) => {
-                let error = ManagerError(error.to_string());
-                let _ = ready.send(Err(error.to_string()));
-                return Err(error);
-            }
-        };
-        let first_inhibitor = match acquire_inhibitor(&proxy).await {
-            Ok(inhibitor) => inhibitor,
+        let setup = async {
+            let proxy = LoginManagerProxy::builder(&connection)
+                .cache_properties(zbus::proxy::CacheProperties::No)
+                .build()
+                .await?;
+            let owner_changes = proxy.inner().receive_owner_changed().await?;
+            let signals = proxy.receive_prepare_for_sleep().await?;
+            let inhibitor = acquire_inhibitor(&proxy).await?;
+            let delay = Duration::from_micros(proxy.inhibit_delay_max_usec().await?);
+            Ok::<_, FanError>((proxy, owner_changes, signals, inhibitor, delay))
+        }
+        .await;
+        let (proxy, mut owner_changes, mut signals, inhibitor, delay) = match setup {
+            Ok(setup) => setup,
             Err(error) => {
                 let _ = ready.send(Err(error.to_string()));
                 return Err(error);
             }
         };
-        let mut inhibitor = Some(first_inhibitor);
-        let delay = match proxy.inhibit_delay_max_usec().await {
-            Ok(microseconds) => Duration::from_micros(microseconds),
-            Err(error) => {
-                let _ = ready.send(Err(error.to_string()));
-                return Err(ManagerError(error.to_string()));
-            }
-        };
+        let mut inhibitor = Some(inhibitor);
         self.sleep_monitor_healthy.store(true, Ordering::Release);
         let _ = ready.send(Ok(()));
         loop {
             tokio::select! {
                 signal = signals.next() => {
                     let signal = signal.ok_or_else(|| {
-                        ManagerError("logind PrepareForSleep signal stream ended".into())
+                        FanError("logind PrepareForSleep signal stream ended".into())
                     })?;
                     let arguments = signal
                         .args()
-                        .map_err(|error| ManagerError(error.to_string()))?;
+                        .map_err(FanError::new)?;
                     if *arguments.sleeping() {
                         self.custom_control_allowed.store(false, Ordering::Release);
                         if let Err(error) = self.prepare_for_sleep(delay).await {
@@ -628,18 +548,18 @@ impl FanManager {
                 }
                 owner = owner_changes.next() => {
                     return match owner {
-                        Some(Some(owner)) => Err(ManagerError(format!(
+                        Some(Some(owner)) => Err(FanError(format!(
                             "logind D-Bus owner changed to {owner}"
                         ))),
-                        Some(None) => Err(ManagerError("logind D-Bus owner disappeared".into())),
-                        None => Err(ManagerError("logind D-Bus owner monitor ended".into())),
+                        Some(None) => Err(FanError("logind D-Bus owner disappeared".into())),
+                        None => Err(FanError("logind D-Bus owner monitor ended".into())),
                     };
                 }
             }
         }
     }
 
-    async fn resume_controllers(&self) -> Result<(), ManagerError> {
+    async fn resume_controllers(&self) -> Result<(), FanError> {
         let mut failed = false;
         for (_, controller) in &self.controllers {
             if let Err(error) = controller.lock().await.resume() {
@@ -651,7 +571,7 @@ impl FanManager {
             self.fail_all_to_automatic("profile could not be restored after resume")
                 .await;
             if !self.automatic_fallback_verified().await {
-                return Err(ManagerError(
+                return Err(FanError(
                     "resume failed without a verified automatic fallback".into(),
                 ));
             }
@@ -672,7 +592,7 @@ impl FanManager {
         }
     }
 
-    async fn prepare_for_sleep(&self, delay: Duration) -> Result<(), ManagerError> {
+    async fn prepare_for_sleep(&self, delay: Duration) -> Result<(), FanError> {
         self.custom_control_allowed.store(false, Ordering::Release);
         let manager = self.clone();
         let deadline = Instant::now() + delay;
@@ -691,25 +611,34 @@ impl FanManager {
             }
             let remaining = deadline.saturating_duration_since(Instant::now());
             if remaining.is_zero() {
-                return Err(ManagerError(errors.join("; ")));
+                return Err(FanError(errors.join("; ")));
             }
             std::thread::sleep(remaining.min(Duration::from_millis(100)));
         });
         match tokio::time::timeout(delay, handoff).await {
             Ok(Ok(result)) => result,
-            Ok(Err(error)) => Err(ManagerError(format!("fan suspend handoff task failed: {error}"))),
-            Err(_) => Err(ManagerError(
+            Ok(Err(error)) => Err(FanError(format!("fan suspend handoff task failed: {error}"))),
+            Err(_) => Err(FanError(
                 "fan automatic handoff exceeded logind's delay budget; suspend may proceed without verified recovery".into(),
             )),
         }
     }
 }
 
-fn controller_iteration_is_safe(
-    result: &Result<(), ControllerError>,
-    automatic_verified: bool,
-) -> bool {
+fn controller_iteration_is_safe(result: &Result<(), FanError>, automatic_verified: bool) -> bool {
     result.is_ok() || automatic_verified
+}
+
+fn matched_device(
+    platform_dir: &Path,
+    sysfs_root: &Path,
+    device_tree_path: &Path,
+) -> Result<Option<DeviceConfig>, FanError> {
+    select_device(
+        &load_databases(platform_dir)?,
+        &DmiInfo::read(sysfs_root),
+        &read_device_tree(device_tree_path)?,
+    )
 }
 
 fn restore_configurations(sysfs_root: &Path, fans: &[FanConfig]) -> Vec<String> {
@@ -722,21 +651,21 @@ fn restore_configurations(sysfs_root: &Path, fans: &[FanConfig]) -> Vec<String> 
         .collect()
 }
 
-fn initialization_failure(reason: String, sysfs_root: &Path, fans: &[FanConfig]) -> ManagerError {
+fn initialization_failure(reason: String, sysfs_root: &Path, fans: &[FanConfig]) -> FanError {
     let recovery_errors = restore_configurations(sysfs_root, fans);
     if recovery_errors.is_empty() {
-        ManagerError(format!(
+        FanError(format!(
             "{reason}; all configured fans were restored to firmware automatic"
         ))
     } else {
-        ManagerError(format!(
+        FanError(format!(
             "{reason}; firmware automatic recovery also failed: {}",
             recovery_errors.join("; ")
         ))
     }
 }
 
-async fn acquire_inhibitor(proxy: &LoginManagerProxy<'_>) -> Result<OwnedFd, ManagerError> {
+async fn acquire_inhibitor(proxy: &LoginManagerProxy<'_>) -> Result<OwnedFd, FanError> {
     proxy
         .inhibit(
             "sleep",
@@ -745,7 +674,7 @@ async fn acquire_inhibitor(proxy: &LoginManagerProxy<'_>) -> Result<OwnedFd, Man
             "delay",
         )
         .await
-        .map_err(|error| ManagerError(format!("unable to acquire sleep delay inhibitor: {error}")))
+        .map_err(|error| FanError(format!("unable to acquire sleep delay inhibitor: {error}")))
 }
 
 fn platform_directory() -> PathBuf {
@@ -855,7 +784,7 @@ mod tests {
 
     #[test]
     fn controller_fault_requires_verified_automatic_fallback() {
-        let failed = Err(ControllerError("test failure".into()));
+        let failed = Err(FanError("test failure".into()));
         assert!(!controller_iteration_is_safe(&failed, false));
         assert!(controller_iteration_is_safe(&failed, true));
         assert!(controller_iteration_is_safe(&Ok(()), false));

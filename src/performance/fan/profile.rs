@@ -1,5 +1,6 @@
 //! Untrusted selections. Hardware addressing and safety policy live elsewhere.
-use super::config::{ConfigError, CurvePoint};
+use super::config::CurvePoint;
+use super::FanError;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::fs;
@@ -39,7 +40,7 @@ pub struct FanProfile {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub sensors: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub curve: Vec<(f64, u8)>,
+    pub curve: Vec<CurvePoint>,
 }
 
 impl FanProfile {
@@ -53,17 +54,7 @@ impl FanProfile {
         }
     }
 
-    pub fn points(&self) -> Vec<CurvePoint> {
-        self.curve
-            .iter()
-            .map(|&(temperature_c, percent)| CurvePoint {
-                temperature_c,
-                percent,
-            })
-            .collect()
-    }
-
-    pub(crate) fn validate_shape(&self) -> Result<(), ConfigError> {
+    pub(crate) fn validate_shape(&self) -> Result<(), FanError> {
         let valid = match self.mode {
             FanMode::Automatic => {
                 self.percent.is_none() && self.sensors.is_empty() && self.curve.is_empty()
@@ -85,7 +76,7 @@ impl FanProfile {
                 .iter()
                 .any(|id| id.is_empty() || !sensors.insert(id))
         {
-            return Err(ConfigError(format!(
+            return Err(FanError(format!(
                 "invalid fields for fan {} mode {}",
                 self.fan,
                 self.mode.name()
@@ -103,47 +94,46 @@ pub struct Profile {
 }
 
 impl Profile {
-    pub fn from_json(raw: &str) -> Result<Self, ConfigError> {
+    pub fn from_json(raw: &str) -> Result<Self, FanError> {
         check_size(raw.len())?;
-        let profile: Self =
-            serde_json::from_str(raw).map_err(|error| ConfigError(error.to_string()))?;
+        let profile: Self = serde_json::from_str(raw).map_err(FanError::new)?;
         profile.validate()?;
         Ok(profile)
     }
 
-    pub fn from_yaml(raw: &str) -> Result<Self, ConfigError> {
+    pub fn from_yaml(raw: &str) -> Result<Self, FanError> {
         check_size(raw.len())?;
         let profile: Self = serde_yaml::from_str(raw)?;
         profile.validate()?;
         Ok(profile)
     }
 
-    fn validate(&self) -> Result<(), ConfigError> {
+    fn validate(&self) -> Result<(), FanError> {
         let mut fans = HashSet::new();
         if self.name.trim().is_empty() || self.name.len() > 128 || self.fans.is_empty() {
-            return Err(ConfigError(
+            return Err(FanError(
                 "profile requires a name and at least one fan".into(),
             ));
         }
         for fan in &self.fans {
             fan.validate_shape()?;
             if !fans.insert(&fan.fan) {
-                return Err(ConfigError(format!("duplicate fan ID {}", fan.fan)));
+                return Err(FanError(format!("duplicate fan ID {}", fan.fan)));
             }
         }
         Ok(())
     }
 }
 
-fn check_size(size: usize) -> Result<(), ConfigError> {
+fn check_size(size: usize) -> Result<(), FanError> {
     if size > MAX_PROFILE_BYTES {
-        return Err(ConfigError("profile exceeds 64 KiB".into()));
+        return Err(FanError("profile exceeds 64 KiB".into()));
     }
     Ok(())
 }
 
 /// Read only the caller's open file. Never reopen its path as the service user.
-pub fn load_profile(file: &fs::File) -> Result<(Profile, String), ConfigError> {
+pub fn load_profile(file: &fs::File) -> Result<(Profile, String), FanError> {
     let metadata = file.metadata()?;
     let flags = unsafe { libc::fcntl(file.as_raw_fd(), libc::F_GETFL) };
     if flags < 0 {
@@ -151,12 +141,12 @@ pub fn load_profile(file: &fs::File) -> Result<(Profile, String), ConfigError> {
     }
     if !metadata.is_file() || flags & libc::O_PATH != 0 || flags & libc::O_ACCMODE == libc::O_WRONLY
     {
-        return Err(ConfigError(
+        return Err(FanError(
             "profile descriptor must be a readable regular file".into(),
         ));
     }
     if metadata.len() > MAX_PROFILE_BYTES as u64 {
-        return Err(ConfigError("profile exceeds 64 KiB".into()));
+        return Err(FanError("profile exceeds 64 KiB".into()));
     }
     // pread leaves the caller's shared file offset alone. Parse an owned,
     // bounded copy, including when the caller replaces or changes its file.
@@ -171,8 +161,7 @@ pub fn load_profile(file: &fs::File) -> Result<(Profile, String), ConfigError> {
         }
     }
     check_size(size)?;
-    let raw =
-        std::str::from_utf8(&bytes[..size]).map_err(|error| ConfigError(error.to_string()))?;
+    let raw = std::str::from_utf8(&bytes[..size]).map_err(FanError::new)?;
     let profile = Profile::from_yaml(raw)?;
     let path = fs::read_link(format!("/proc/self/fd/{}", file.as_raw_fd()))
         .ok()

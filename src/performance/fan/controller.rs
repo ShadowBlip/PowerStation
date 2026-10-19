@@ -4,22 +4,13 @@ use super::config::{
 };
 use super::discovery::{discover_fan, discover_fan_enable, BackendKind, FanPaths};
 use super::profile::{FanMode, FanProfile};
+use super::FanError;
 use std::collections::BTreeMap;
-use std::fmt::{Display, Formatter};
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-
-#[derive(Debug, Clone)]
-pub struct ControllerError(pub String);
-impl Display for ControllerError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
-    }
-}
-impl std::error::Error for ControllerError {}
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct FanSnapshot {
@@ -69,9 +60,8 @@ impl FanController {
         device_id: String,
         config: FanConfig,
         sysfs_root: PathBuf,
-    ) -> Result<Self, ControllerError> {
-        let paths = discover_fan(&sysfs_root, &config)
-            .map_err(|error| ControllerError(error.to_string()))?;
+    ) -> Result<Self, FanError> {
+        let paths = discover_fan(&sysfs_root, &config)?;
         let id = format!("{device_id}/{}", config.id);
         Ok(Self {
             config,
@@ -108,7 +98,7 @@ impl FanController {
         self.custom_control_allowed = gate;
     }
 
-    pub fn start(&mut self) -> Result<(), ControllerError> {
+    pub fn start(&mut self) -> Result<(), FanError> {
         // No on-disk selection is ever read. Every new process starts in firmware.
         self.selection = FanProfile::automatic(self.id.clone());
         self.set_automatic()?;
@@ -123,12 +113,12 @@ impl FanController {
         }
     }
 
-    pub fn tick(&mut self) -> Result<(), ControllerError> {
+    pub fn tick(&mut self) -> Result<(), FanError> {
         if self.suspended {
             return if self.automatic_verified {
                 Ok(())
             } else {
-                Err(ControllerError(
+                Err(FanError(
                     "suspended fan has no verified automatic handoff".into(),
                 ))
             };
@@ -136,7 +126,7 @@ impl FanController {
         if !self.custom_control_allowed.load(Ordering::Acquire)
             && self.selection.mode != FanMode::Automatic
         {
-            return Err(ControllerError(
+            return Err(FanError(
                 "custom fan monitor is paused for a lifecycle handoff".into(),
             ));
         }
@@ -154,7 +144,7 @@ impl FanController {
         Ok(())
     }
 
-    pub fn set_automatic(&mut self) -> Result<(), ControllerError> {
+    pub fn set_automatic(&mut self) -> Result<(), FanError> {
         // Releasing control bypasses lifecycle and telemetry checks.
         if let Err(error) = self.restore_automatic() {
             return Err(
@@ -168,10 +158,9 @@ impl FanController {
     }
 
     /// Pure validation, including platform capability checks; no hardware writes.
-    pub fn validate_selection(&self, next: &FanProfile) -> Result<(), ControllerError> {
-        next.validate_shape()
-            .map_err(|error| ControllerError(error.to_string()))?;
-        let fail = |message: &str| ControllerError(message.to_string());
+    pub fn validate_selection(&self, next: &FanProfile) -> Result<(), FanError> {
+        next.validate_shape()?;
+        let fail = |message: &str| FanError(message.to_string());
         if next.fan != self.id {
             return Err(fail("unknown fan ID"));
         }
@@ -199,14 +188,12 @@ impl FanController {
                 return Err(fail("unknown or unavailable sensor ID"));
             }
         }
-        self.config
-            .validate_curve("profile", &next.points())
-            .map_err(|error| ControllerError(error.to_string()))?;
+        self.config.validate_curve("profile", &next.curve)?;
         if next.mode == FanMode::FirmwareCurve {
             let BackendKind::HardwareCurve(points) = &self.paths.backend else {
                 return Err(fail("firmware_curve is unavailable"));
             };
-            validate_hardware_curve(&next.points(), points.len())?;
+            validate_hardware_curve(&next.curve, points.len())?;
             if next
                 .curve
                 .iter()
@@ -226,7 +213,7 @@ impl FanController {
         Ok(())
     }
 
-    pub fn configure(&mut self, next: FanProfile) -> Result<(), ControllerError> {
+    pub fn configure(&mut self, next: FanProfile) -> Result<(), FanError> {
         self.validate_selection(&next)?;
         if next.mode == FanMode::Automatic {
             return self.set_automatic();
@@ -249,7 +236,7 @@ impl FanController {
         Ok(())
     }
 
-    pub fn prepare_for_sleep(&mut self) -> Result<(), ControllerError> {
+    pub fn prepare_for_sleep(&mut self) -> Result<(), FanError> {
         self.suspended = true;
         self.invalidate_telemetry();
         self.restore_automatic().map_err(|error| {
@@ -259,7 +246,7 @@ impl FanController {
         })
     }
 
-    pub fn resume(&mut self) -> Result<(), ControllerError> {
+    pub fn resume(&mut self) -> Result<(), FanError> {
         self.suspended = false;
         if let Err(error) = self.rediscover() {
             return Err(self.fail_safe(format!("resume discovery failed: {error}")));
@@ -275,13 +262,13 @@ impl FanController {
         Ok(())
     }
 
-    pub fn shutdown(&mut self) -> Result<(), ControllerError> {
+    pub fn shutdown(&mut self) -> Result<(), FanError> {
         self.suspended = true;
         self.invalidate_telemetry();
         self.restore_automatic()
     }
 
-    pub(crate) fn fail_to_automatic(&mut self, reason: &str) -> ControllerError {
+    pub(crate) fn fail_to_automatic(&mut self, reason: &str) -> FanError {
         self.fail_safe(reason.to_string())
     }
 
@@ -313,11 +300,11 @@ impl FanController {
         &mut self,
         telemetry: Telemetry,
         allow_transition: bool,
-    ) -> Result<(), ControllerError> {
+    ) -> Result<(), FanError> {
         if self.selection.mode != FanMode::Automatic
             && telemetry.temperature_c >= FIRMWARE_HANDOFF_TEMPERATURE_C
         {
-            return Err(ControllerError(format!(
+            return Err(FanError(format!(
                 "temperature {:.1} C reached the {:.1} C firmware handoff limit",
                 telemetry.temperature_c, FIRMWARE_HANDOFF_TEMPERATURE_C
             )));
@@ -326,7 +313,7 @@ impl FanController {
             FanMode::Automatic => {
                 if !allow_transition && telemetry.hardware_mode != self.config.mode_values.automatic
                 {
-                    return Err(ControllerError(format!(
+                    return Err(FanError(format!(
                         "unexpected hardware mode change to {}",
                         telemetry.hardware_mode
                     )));
@@ -346,14 +333,12 @@ impl FanController {
                 self.apply_manual(self.selection.percent.unwrap(), telemetry, allow_transition)
             }
             FanMode::SoftwareCurve => {
-                let percent = interpolate(&self.selection.points(), telemetry.curve_temperature_c);
+                let percent = interpolate(&self.selection.curve, telemetry.curve_temperature_c);
                 self.apply_manual(percent, telemetry, allow_transition)
             }
             FanMode::FirmwareCurve => {
                 let BackendKind::HardwareCurve(attributes) = self.paths.backend.clone() else {
-                    return Err(ControllerError(
-                        "native curve attributes disappeared".into(),
-                    ));
+                    return Err(FanError("native curve attributes disappeared".into()));
                 };
                 let expected = if self.thermal_override {
                     self.config.mode_values.manual
@@ -361,7 +346,7 @@ impl FanController {
                     self.config.mode_values.hardware_curve.unwrap()
                 };
                 if !allow_transition && self.owns_control && telemetry.hardware_mode != expected {
-                    return Err(ControllerError(format!(
+                    return Err(FanError(format!(
                         "unexpected hardware mode change to {}",
                         telemetry.hardware_mode
                     )));
@@ -373,7 +358,7 @@ impl FanController {
                     return Ok(());
                 }
                 if allow_transition || self.thermal_override {
-                    self.program_hardware_curve(&self.selection.points(), &attributes)?;
+                    self.program_hardware_curve(&attributes)?;
                 }
                 self.thermal_override = false;
                 self.owns_control = true;
@@ -381,7 +366,7 @@ impl FanController {
                 // Native duty is not a readback. Do not present an estimate as applied control.
                 self.effective_percent = None;
                 self.check_stall(
-                    interpolate(&self.selection.points(), telemetry.curve_temperature_c),
+                    interpolate(&self.selection.curve, telemetry.curve_temperature_c),
                     telemetry.rpm,
                     !allow_transition,
                 )
@@ -394,12 +379,12 @@ impl FanController {
         requested_percent: u8,
         telemetry: Telemetry,
         allow_transition: bool,
-    ) -> Result<(), ControllerError> {
+    ) -> Result<(), FanError> {
         let percent = self.safe_percent(requested_percent, telemetry.temperature_c);
         let raw = percent_to_raw(percent, &self.config);
         let expected_mode = self.config.mode_values.manual;
         if !allow_transition && self.owns_control && telemetry.hardware_mode != expected_mode {
-            return Err(ControllerError(format!(
+            return Err(FanError(format!(
                 "unexpected fan owner changed hardware mode to {}",
                 telemetry.hardware_mode
             )));
@@ -435,14 +420,13 @@ impl FanController {
 
     fn program_hardware_curve(
         &mut self,
-        points: &[CurvePoint],
         attributes: &[super::discovery::HardwareCurvePointPaths],
-    ) -> Result<(), ControllerError> {
-        validate_hardware_curve(points, attributes.len())?;
+    ) -> Result<(), FanError> {
+        validate_hardware_curve(&self.selection.curve, attributes.len())?;
         self.restore_automatic()?;
-        for (point, paths) in points.iter().zip(attributes) {
-            let temperature = (point.temperature_c * 1000.0).round() as i64;
-            let pwm = percent_to_raw(point.percent, &self.config) as i64;
+        for (&(temperature_c, percent), paths) in self.selection.curve.iter().zip(attributes) {
+            let temperature = (temperature_c * 1000.0).round() as i64;
+            let pwm = percent_to_raw(percent, &self.config) as i64;
             write_verify(&paths.temperature, temperature)?;
             write_verify_tolerance(
                 &paths.pwm,
@@ -450,10 +434,11 @@ impl FanController {
                 self.config.limits.pwm_readback_tolerance as i64,
             )?;
         }
-        let mode =
-            self.config.mode_values.hardware_curve.ok_or_else(|| {
-                ControllerError("hardware curve mode value is unavailable".into())
-            })?;
+        let mode = self
+            .config
+            .mode_values
+            .hardware_curve
+            .ok_or_else(|| FanError("hardware curve mode value is unavailable".into()))?;
         write_verify(&self.paths.enable, mode)?;
         Ok(())
     }
@@ -490,7 +475,7 @@ impl FanController {
         percent: u8,
         rpm: u32,
         advance_interval: bool,
-    ) -> Result<(), ControllerError> {
+    ) -> Result<(), FanError> {
         if percent >= self.config.limits.minimum_running_percent
             && rpm < self.config.limits.stall_rpm
         {
@@ -498,7 +483,7 @@ impl FanController {
                 self.stall_seconds += 1;
             }
             if self.stall_seconds >= self.config.limits.stall_grace_seconds {
-                return Err(ControllerError(format!(
+                return Err(FanError(format!(
                     "fan stalled below {} RPM at {} percent",
                     self.config.limits.stall_rpm, percent
                 )));
@@ -509,13 +494,12 @@ impl FanController {
         Ok(())
     }
 
-    fn rediscover(&mut self) -> Result<(), ControllerError> {
-        let discovered = discover_fan(&self.sysfs_root, &self.config)
-            .map_err(|error| ControllerError(error.to_string()))?;
+    fn rediscover(&mut self) -> Result<(), FanError> {
+        let discovered = discover_fan(&self.sysfs_root, &self.config)?;
         if discovered.device_identity != self.device_identity {
             let _ = restore_automatic_at(&self.paths, self.config.mode_values.automatic);
             let _ = restore_automatic_at(&discovered, self.config.mode_values.automatic);
-            return Err(ControllerError(format!(
+            return Err(FanError(format!(
                 "fan hardware identity changed from {} to {}",
                 self.device_identity, discovered.device_identity
             )));
@@ -525,7 +509,7 @@ impl FanController {
         {
             let _ = restore_automatic_at(&self.paths, self.config.mode_values.automatic);
             let _ = restore_automatic_at(&discovered, self.config.mode_values.automatic);
-            return Err(ControllerError(
+            return Err(FanError(
                 "fan backend attributes changed during control".into(),
             ));
         }
@@ -533,11 +517,11 @@ impl FanController {
         Ok(())
     }
 
-    fn read_telemetry(&mut self) -> Result<Telemetry, ControllerError> {
+    fn read_telemetry(&mut self) -> Result<Telemetry, FanError> {
         let hardware_mode = read_integer(&self.paths.enable)?;
         let rpm = read_integer(&self.paths.rpm)?;
         if rpm < 0 || rpm as u64 > self.config.limits.maximum_valid_rpm as u64 {
-            return Err(ControllerError(format!("implausible fan RPM {rpm}")));
+            return Err(FanError(format!("implausible fan RPM {rpm}")));
         }
         let mut readings = BTreeMap::new();
         let mut hottest = f64::NEG_INFINITY;
@@ -549,14 +533,14 @@ impl FanController {
                 .paths
                 .temperature_inputs
                 .get(&source.id)
-                .ok_or_else(|| ControllerError(format!("sensor {id} is unavailable")))
+                .ok_or_else(|| FanError(format!("sensor {id} is unavailable")))
                 .and_then(|path| read_integer(path))
                 .map(|raw| raw as f64 / 1000.0)
                 .and_then(|temperature| {
                     if temperature < self.config.limits.minimum_valid_temperature_c
                         || temperature > self.config.limits.maximum_valid_temperature_c
                     {
-                        Err(ControllerError(format!(
+                        Err(FanError(format!(
                             "implausible temperature {temperature:.1} C from {id}"
                         )))
                     } else {
@@ -578,9 +562,7 @@ impl FanController {
             }
         }
         if !hottest.is_finite() {
-            return Err(ControllerError(
-                "no valid safety temperature telemetry".into(),
-            ));
+            return Err(FanError("no valid safety temperature telemetry".into()));
         }
         self.sensor_temperatures = readings;
         Ok(Telemetry {
@@ -604,11 +586,11 @@ impl FanController {
         self.effective_percent = None;
     }
 
-    fn restore_automatic(&mut self) -> Result<(), ControllerError> {
+    fn restore_automatic(&mut self) -> Result<(), FanError> {
         if let Err(original) = restore_automatic_at(&self.paths, self.config.mode_values.automatic)
         {
             restore_automatic_for_config(&self.sysfs_root, &self.config).map_err(|fallback| {
-                ControllerError(format!(
+                FanError(format!(
                     "automatic restore at the last known path failed: {original}; emergency rediscovery failed: {fallback}"
                 ))
             })?;
@@ -621,7 +603,7 @@ impl FanController {
         Ok(())
     }
 
-    fn fail_safe(&mut self, reason: String) -> ControllerError {
+    fn fail_safe(&mut self, reason: String) -> FanError {
         self.invalidate_telemetry();
         let restore_error = self.restore_automatic().err();
         self.selection = FanProfile::automatic(self.id.clone());
@@ -632,31 +614,31 @@ impl FanController {
             self.automatic_verified = false;
         }
         self.fault = Some(message.clone());
-        ControllerError(message)
+        FanError(message)
     }
 }
 
 fn interpolate(points: &[CurvePoint], temperature_c: f64) -> u8 {
-    if temperature_c <= points[0].temperature_c {
-        return points[0].percent;
+    let (first_temperature, first_percent) = points[0];
+    if temperature_c <= first_temperature {
+        return first_percent;
     }
     for pair in points.windows(2) {
-        let low = pair[0];
-        let high = pair[1];
-        if temperature_c <= high.temperature_c {
-            let span = high.temperature_c - low.temperature_c;
-            let ratio = (temperature_c - low.temperature_c) / span;
-            return (low.percent as f64 + ratio * (high.percent as f64 - low.percent as f64))
+        let (low_temperature, low_percent) = pair[0];
+        let (high_temperature, high_percent) = pair[1];
+        if temperature_c <= high_temperature {
+            let ratio = (temperature_c - low_temperature) / (high_temperature - low_temperature);
+            return (low_percent as f64 + ratio * (high_percent as f64 - low_percent as f64))
                 .round()
                 .clamp(0.0, 100.0) as u8;
         }
     }
-    points.last().unwrap().percent
+    points.last().unwrap().1
 }
 
-fn validate_hardware_curve(points: &[CurvePoint], count: usize) -> Result<(), ControllerError> {
+fn validate_hardware_curve(points: &[CurvePoint], count: usize) -> Result<(), FanError> {
     if count < 2 || points.len() != count {
-        return Err(ControllerError(format!(
+        return Err(FanError(format!(
             "hardware curve requires exactly {count} points; received {}",
             points.len()
         )));
@@ -669,44 +651,43 @@ fn percent_to_raw(percent: u8, config: &FanConfig) -> u32 {
     config.limits.pwm_min + ((span as f64 * percent as f64 / 100.0).round() as u32)
 }
 
-pub(crate) fn restore_automatic_at(paths: &FanPaths, value: i64) -> Result<(), ControllerError> {
+pub(crate) fn restore_automatic_at(paths: &FanPaths, value: i64) -> Result<(), FanError> {
     write_verify(&paths.enable, value)
 }
 
 pub(crate) fn restore_automatic_for_config(
     sysfs_root: &Path,
     config: &FanConfig,
-) -> Result<(), ControllerError> {
-    let enable = discover_fan_enable(sysfs_root, config)
-        .map_err(|error| ControllerError(error.to_string()))?;
+) -> Result<(), FanError> {
+    let enable = discover_fan_enable(sysfs_root, config)?;
     write_verify(&enable, config.mode_values.automatic)
 }
 
-fn write_verify(path: &Path, value: i64) -> Result<(), ControllerError> {
+fn write_verify(path: &Path, value: i64) -> Result<(), FanError> {
     write_verify_tolerance(path, value, 0)
 }
 
-fn write_verify_tolerance(path: &Path, value: i64, tolerance: i64) -> Result<(), ControllerError> {
+fn write_verify_tolerance(path: &Path, value: i64, tolerance: i64) -> Result<(), FanError> {
     write_value(path, value)?;
     read_verify_tolerance(path, value, tolerance)
 }
 
-fn write_value(path: &Path, value: i64) -> Result<(), ControllerError> {
+fn write_value(path: &Path, value: i64) -> Result<(), FanError> {
     let mut file = OpenOptions::new()
         .write(true)
         .truncate(true)
         .open(path)
-        .map_err(|error| ControllerError(format!("unable to open {}: {error}", path.display())))?;
+        .map_err(|error| FanError(format!("unable to open {}: {error}", path.display())))?;
     file.write_all(value.to_string().as_bytes())
-        .map_err(|error| ControllerError(format!("unable to write {}: {error}", path.display())))?;
+        .map_err(|error| FanError(format!("unable to write {}: {error}", path.display())))?;
     drop(file);
     Ok(())
 }
 
-fn read_verify_tolerance(path: &Path, value: i64, tolerance: i64) -> Result<(), ControllerError> {
+fn read_verify_tolerance(path: &Path, value: i64, tolerance: i64) -> Result<(), FanError> {
     let actual = read_integer(path)?;
     if actual.abs_diff(value) > tolerance as u64 {
-        return Err(ControllerError(format!(
+        return Err(FanError(format!(
             "readback failed for {}: wrote {value}, read {actual}, tolerance {tolerance}",
             path.display(),
         )));
@@ -714,11 +695,11 @@ fn read_verify_tolerance(path: &Path, value: i64, tolerance: i64) -> Result<(), 
     Ok(())
 }
 
-fn read_integer(path: &Path) -> Result<i64, ControllerError> {
+fn read_integer(path: &Path) -> Result<i64, FanError> {
     let raw = fs::read_to_string(path)
-        .map_err(|error| ControllerError(format!("unable to read {}: {error}", path.display())))?;
+        .map_err(|error| FanError(format!("unable to read {}: {error}", path.display())))?;
     raw.trim().parse::<i64>().map_err(|error| {
-        ControllerError(format!(
+        FanError(format!(
             "invalid integer telemetry in {}: {error}",
             path.display()
         ))
@@ -897,14 +878,14 @@ mod tests {
     }
 
     impl FanController {
-        fn set_manual(&mut self, percent: u8) -> Result<(), ControllerError> {
+        fn set_manual(&mut self, percent: u8) -> Result<(), FanError> {
             self.configure(FanProfile {
                 mode: FanMode::Manual,
                 percent: Some(percent),
                 ..FanProfile::automatic(self.id().into())
             })
         }
-        fn set_curve(&mut self, points: Vec<CurvePoint>) -> Result<(), ControllerError> {
+        fn set_curve(&mut self, points: Vec<CurvePoint>) -> Result<(), FanError> {
             let mode = if matches!(self.paths.backend, BackendKind::HardwareCurve(_)) {
                 FanMode::FirmwareCurve
             } else {
@@ -912,10 +893,7 @@ mod tests {
             };
             self.configure(FanProfile {
                 mode,
-                curve: points
-                    .into_iter()
-                    .map(|point| (point.temperature_c, point.percent))
-                    .collect(),
+                curve: points,
                 ..quiet(self)
             })
         }
@@ -991,16 +969,7 @@ mod tests {
         controller.configure(native(&controller)).unwrap();
         let before = controller.snapshot();
         assert!(controller
-            .set_curve(vec![
-                CurvePoint {
-                    temperature_c: 45.0,
-                    percent: 10
-                },
-                CurvePoint {
-                    temperature_c: 95.0,
-                    percent: 100
-                },
-            ])
+            .set_curve(vec![(45.0, 10), (95.0, 100),])
             .is_err());
         assert_eq!(controller.snapshot(), before);
         assert_eq!(read_integer(&fixture.fan("pwm1_enable")).unwrap(), 5);

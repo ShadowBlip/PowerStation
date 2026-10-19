@@ -1,19 +1,8 @@
 use super::config::{BackendPreference, FanConfig, TemperatureSource};
+use super::FanError;
 use std::collections::{BTreeMap, BTreeSet};
-use std::fmt::{Display, Formatter};
 use std::fs;
 use std::path::{Path, PathBuf};
-
-#[derive(Debug)]
-pub struct DiscoveryError(pub String);
-
-impl Display for DiscoveryError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
-    }
-}
-
-impl std::error::Error for DiscoveryError {}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HardwareCurvePointPaths {
@@ -54,7 +43,7 @@ pub struct FanPaths {
     pub backend: BackendKind,
 }
 
-pub fn discover_fan(sysfs_root: &Path, config: &FanConfig) -> Result<FanPaths, DiscoveryError> {
+pub fn discover_fan(sysfs_root: &Path, config: &FanConfig) -> Result<FanPaths, FanError> {
     let hwmon_root = sysfs_root.join("class/hwmon");
     let entries = read_hwmon_entries(&hwmon_root)?;
     let fan_dir = discover_fan_directory(&entries, config)?;
@@ -81,19 +70,13 @@ pub fn discover_fan(sysfs_root: &Path, config: &FanConfig) -> Result<FanPaths, D
 /// Find only the mode attribute needed for an emergency firmware-auto restore.
 /// This deliberately does not depend on PWM, RPM, temperature, or auto-point
 /// attributes, because those may be the reason the full discovery path failed.
-pub fn discover_fan_enable(
-    sysfs_root: &Path,
-    config: &FanConfig,
-) -> Result<PathBuf, DiscoveryError> {
+pub fn discover_fan_enable(sysfs_root: &Path, config: &FanConfig) -> Result<PathBuf, FanError> {
     let entries = read_hwmon_entries(&sysfs_root.join("class/hwmon"))?;
     let fan_dir = discover_fan_directory(&entries, config)?;
     checked_attribute(&fan_dir, &format!("pwm{}_enable", config.hwmon.channel))
 }
 
-fn discover_fan_directory(
-    entries: &[PathBuf],
-    config: &FanConfig,
-) -> Result<PathBuf, DiscoveryError> {
+fn discover_fan_directory(entries: &[PathBuf], config: &FanConfig) -> Result<PathBuf, FanError> {
     let mut fan_matches = Vec::new();
     for path in entries {
         if read_trimmed(path.join("name")).as_deref() != Some(config.hwmon.name.as_str()) {
@@ -114,9 +97,9 @@ fn discover_fan_directory(
     Ok(canonical_or_original(&fan_dir))
 }
 
-fn read_hwmon_entries(root: &Path) -> Result<Vec<PathBuf>, DiscoveryError> {
+fn read_hwmon_entries(root: &Path) -> Result<Vec<PathBuf>, FanError> {
     let directory = fs::read_dir(root).map_err(|error| {
-        DiscoveryError(format!(
+        FanError(format!(
             "unable to read hwmon directory {}: {error}",
             root.display()
         ))
@@ -125,7 +108,7 @@ fn read_hwmon_entries(root: &Path) -> Result<Vec<PathBuf>, DiscoveryError> {
     for entry in directory {
         let path = entry
             .map_err(|error| {
-                DiscoveryError(format!(
+                FanError(format!(
                     "unable to enumerate hwmon directory {}: {error}",
                     root.display()
                 ))
@@ -142,7 +125,7 @@ fn read_hwmon_entries(root: &Path) -> Result<Vec<PathBuf>, DiscoveryError> {
 fn discover_temperatures(
     entries: &[PathBuf],
     sources: &[TemperatureSource],
-) -> Result<BTreeMap<String, PathBuf>, DiscoveryError> {
+) -> Result<BTreeMap<String, PathBuf>, FanError> {
     let mut inputs = BTreeMap::new();
     for source in sources {
         let mut matches = Vec::new();
@@ -151,14 +134,14 @@ fn discover_temperatures(
                 continue;
             }
             let directory = fs::read_dir(path).map_err(|error| {
-                DiscoveryError(format!(
+                FanError(format!(
                     "unable to inspect temperature hwmon {}: {error}",
                     path.display()
                 ))
             })?;
             for entry in directory {
                 let entry = entry.map_err(|error| {
-                    DiscoveryError(format!(
+                    FanError(format!(
                         "unable to enumerate temperature hwmon {}: {error}",
                         path.display()
                     ))
@@ -209,19 +192,19 @@ fn discover_temperatures(
 fn discover_auto_points(
     fan_dir: &Path,
     channel: u16,
-) -> Result<Option<Vec<HardwareCurvePointPaths>>, DiscoveryError> {
+) -> Result<Option<Vec<HardwareCurvePointPaths>>, FanError> {
     let prefix = format!("pwm{channel}_auto_point");
     let mut temperatures = BTreeMap::new();
     let mut pwms = BTreeMap::new();
     let directory = fs::read_dir(fan_dir).map_err(|error| {
-        DiscoveryError(format!(
+        FanError(format!(
             "unable to inspect fan hwmon {}: {error}",
             fan_dir.display()
         ))
     })?;
     for entry in directory {
         let entry = entry.map_err(|error| {
-            DiscoveryError(format!(
+            FanError(format!(
                 "unable to enumerate fan hwmon {}: {error}",
                 fan_dir.display()
             ))
@@ -241,7 +224,7 @@ fn discover_auto_points(
             continue;
         };
         if index == 0 {
-            return Err(DiscoveryError(
+            return Err(FanError(
                 "hardware fan curve point indexes must start at 1".into(),
             ));
         }
@@ -252,7 +235,7 @@ fn discover_auto_points(
             pwms.insert(index, target)
         };
         if previous.is_some() {
-            return Err(DiscoveryError(format!(
+            return Err(FanError(format!(
                 "duplicate hardware curve point {index} {kind} attribute"
             )));
         }
@@ -264,14 +247,14 @@ fn discover_auto_points(
     let temperature_indexes: BTreeSet<u16> = temperatures.keys().copied().collect();
     let pwm_indexes: BTreeSet<u16> = pwms.keys().copied().collect();
     if temperature_indexes != pwm_indexes {
-        return Err(DiscoveryError(format!(
+        return Err(FanError(format!(
             "partial hardware curve attributes: temperature points {temperature_indexes:?}, PWM points {pwm_indexes:?}"
         )));
     }
     let maximum = *temperature_indexes.last().unwrap();
     let expected: BTreeSet<u16> = (1..=maximum).collect();
     if temperature_indexes != expected {
-        return Err(DiscoveryError(format!(
+        return Err(FanError(format!(
             "hardware curve points are not contiguous: {temperature_indexes:?}"
         )));
     }
@@ -290,9 +273,9 @@ fn discover_auto_points(
 fn select_backend(
     config: &FanConfig,
     auto_points: Option<Vec<HardwareCurvePointPaths>>,
-) -> Result<BackendKind, DiscoveryError> {
+) -> Result<BackendKind, FanError> {
     if auto_points.as_ref().is_some_and(|points| points.len() < 2) {
-        return Err(DiscoveryError(
+        return Err(FanError(
             "hardware curve backend requires at least two complete auto points".into(),
         ));
     }
@@ -301,7 +284,7 @@ fn select_backend(
             || config.mode_values.hardware_curve.is_none()
             || config.firmware_curve_sensor.is_none())
     {
-        return Err(DiscoveryError(
+        return Err(FanError(
             "native curve requested without complete attributes and a trusted sensor binding"
                 .into(),
         ));
@@ -352,10 +335,10 @@ fn uevent_value(path: &Path, key: &str) -> Option<String> {
     })
 }
 
-fn checked_attribute(directory: &Path, name: &str) -> Result<PathBuf, DiscoveryError> {
+fn checked_attribute(directory: &Path, name: &str) -> Result<PathBuf, FanError> {
     let path = directory.join(name);
     if !path.exists() {
-        return Err(DiscoveryError(format!(
+        return Err(FanError(format!(
             "required hwmon attribute {} is missing",
             path.display()
         )));
@@ -363,7 +346,7 @@ fn checked_attribute(directory: &Path, name: &str) -> Result<PathBuf, DiscoveryE
     let canonical_directory = canonical_or_original(directory);
     let canonical_path = canonical_or_original(&path);
     if !canonical_path.starts_with(&canonical_directory) {
-        return Err(DiscoveryError(format!(
+        return Err(FanError(format!(
             "hwmon attribute {} resolves outside {}",
             path.display(),
             directory.display()
@@ -372,11 +355,11 @@ fn checked_attribute(directory: &Path, name: &str) -> Result<PathBuf, DiscoveryE
     Ok(canonical_path)
 }
 
-fn exactly_one<T>(mut values: Vec<T>, description: &str) -> Result<T, DiscoveryError> {
+fn exactly_one<T>(mut values: Vec<T>, description: &str) -> Result<T, FanError> {
     match values.len() {
         1 => Ok(values.remove(0)),
-        0 => Err(DiscoveryError(format!("no {description} match found"))),
-        count => Err(DiscoveryError(format!(
+        0 => Err(FanError(format!("no {description} match found"))),
+        count => Err(FanError(format!(
             "ambiguous {description}: found {count} matches"
         ))),
     }

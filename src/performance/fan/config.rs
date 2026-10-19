@@ -1,6 +1,6 @@
+use super::FanError;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
-use std::fmt::{Display, Formatter};
 use std::fs;
 use std::path::Path;
 
@@ -9,29 +9,6 @@ pub const FAN_SCHEMA_VERSION: u32 = 1;
 // Provisional service policy, pending physical thermal acceptance.
 pub const FULL_SPEED_TEMPERATURE_C: f64 = 95.0;
 pub const FIRMWARE_HANDOFF_TEMPERATURE_C: f64 = 98.0;
-
-#[derive(Debug)]
-pub struct ConfigError(pub String);
-
-impl Display for ConfigError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
-    }
-}
-
-impl std::error::Error for ConfigError {}
-
-impl From<std::io::Error> for ConfigError {
-    fn from(value: std::io::Error) -> Self {
-        Self(value.to_string())
-    }
-}
-
-impl From<serde_yaml::Error> for ConfigError {
-    fn from(value: serde_yaml::Error) -> Self {
-        Self(value.to_string())
-    }
-}
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -151,12 +128,8 @@ pub struct FanLimits {
     pub maximum_valid_rpm: u32,
 }
 
-#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq)]
-#[serde(deny_unknown_fields)]
-pub struct CurvePoint {
-    pub temperature_c: f64,
-    pub percent: u8,
-}
+/// A profile curve point: temperature in degrees Celsius and control percentage.
+pub type CurvePoint = (f64, u8);
 
 impl DmiInfo {
     pub fn read(sysfs_root: &Path) -> Self {
@@ -179,7 +152,7 @@ impl DmiInfo {
 }
 
 /// Device Tree compatible is a NUL-terminated list of exact identifiers.
-pub fn read_device_tree(path: &Path) -> Result<Vec<String>, ConfigError> {
+pub fn read_device_tree(path: &Path) -> Result<Vec<String>, FanError> {
     use std::io::Read;
     let file = match fs::File::open(path) {
         Ok(file) => file,
@@ -189,19 +162,14 @@ pub fn read_device_tree(path: &Path) -> Result<Vec<String>, ConfigError> {
     let mut bytes = Vec::new();
     file.take(65537).read_to_end(&mut bytes)?;
     if bytes.len() > 65536 || bytes.last() != Some(&0) {
-        return Err(ConfigError(
-            "invalid Device Tree compatible property".into(),
-        ));
+        return Err(FanError("invalid Device Tree compatible property".into()));
     }
     bytes[..bytes.len() - 1]
         .split(|byte| *byte == 0)
         .map(|value| {
-            let value =
-                std::str::from_utf8(value).map_err(|error| ConfigError(error.to_string()))?;
+            let value = std::str::from_utf8(value).map_err(FanError::new)?;
             if value.is_empty() {
-                return Err(ConfigError(
-                    "empty Device Tree compatible identifier".into(),
-                ));
+                return Err(FanError("empty Device Tree compatible identifier".into()));
             }
             Ok(value.to_owned())
         })
@@ -246,88 +214,70 @@ impl DeviceConfig {
 }
 
 impl FanConfig {
-    pub fn validate_curve(&self, name: &str, points: &[CurvePoint]) -> Result<(), ConfigError> {
+    pub fn validate_curve(&self, name: &str, points: &[CurvePoint]) -> Result<(), FanError> {
+        let invalid = |reason: &str| FanError(format!("fan {} curve {name} {reason}", self.id));
         if points.len() < 2 {
-            return Err(ConfigError(format!(
-                "fan {} curve {name} must contain at least two points",
-                self.id
-            )));
+            return Err(invalid("must contain at least two points"));
         }
         let mut last_temperature = f64::NEG_INFINITY;
         let mut last_percent = 0;
-        for (index, point) in points.iter().enumerate() {
-            if !point.temperature_c.is_finite()
-                || point.temperature_c < self.limits.minimum_valid_temperature_c
-                || point.temperature_c > FULL_SPEED_TEMPERATURE_C
+        for (index, &(temperature_c, percent)) in points.iter().enumerate() {
+            if !temperature_c.is_finite()
+                || temperature_c < self.limits.minimum_valid_temperature_c
+                || temperature_c > FULL_SPEED_TEMPERATURE_C
             {
-                return Err(ConfigError(format!(
-                    "fan {} curve {name} point {index} has an invalid temperature",
-                    self.id
+                return Err(invalid(&format!(
+                    "point {index} has an invalid temperature"
                 )));
             }
-            if point.temperature_c <= last_temperature {
-                return Err(ConfigError(format!(
-                    "fan {} curve {name} temperatures must strictly increase",
-                    self.id
+            if temperature_c <= last_temperature {
+                return Err(invalid("temperatures must strictly increase"));
+            }
+            if index > 0 && percent < last_percent {
+                return Err(invalid("duty must not decrease"));
+            }
+            if percent < self.limits.minimum_percent {
+                return Err(invalid(&format!(
+                    "point {index} is below the {} percent device minimum",
+                    self.limits.minimum_percent
                 )));
             }
-            if index > 0 && point.percent < last_percent {
-                return Err(ConfigError(format!(
-                    "fan {} curve {name} duty must not decrease",
-                    self.id
-                )));
-            }
-            if point.percent < self.limits.minimum_percent {
-                return Err(ConfigError(format!(
-                    "fan {} curve {name} point {index} is below the {} percent device minimum",
-                    self.id, self.limits.minimum_percent
-                )));
-            }
-            last_temperature = point.temperature_c;
-            last_percent = point.percent;
+            last_temperature = temperature_c;
+            last_percent = percent;
         }
-        if points.last().map(|point| point.percent) != Some(100) {
-            return Err(ConfigError(format!(
-                "fan {} curve {name} must end at 100 percent",
-                self.id
-            )));
+        if points.last().map(|&(_, percent)| percent) != Some(100) {
+            return Err(invalid("must end at 100 percent"));
         }
         Ok(())
     }
 
-    fn validate(&self) -> Result<(), ConfigError> {
+    fn validate(&self) -> Result<(), FanError> {
+        let invalid = |reason: &str| FanError(format!("fan {} {reason}", self.id));
         require_id("fan id", &self.id)?;
         require_text("fan name", &self.name)?;
         require_text("fan hwmon name", &self.hwmon.name)?;
         require_text("fan parent driver", &self.hwmon.parent_driver)?;
         if self.hwmon.channel == 0 {
-            return Err(ConfigError(format!(
-                "fan {} channel must be greater than zero",
-                self.id
-            )));
+            return Err(invalid("channel must be greater than zero"));
         }
         if self.temperature_sources.is_empty() {
-            return Err(ConfigError(format!(
-                "fan {} must define at least one temperature source",
-                self.id
-            )));
+            return Err(invalid("must define at least one temperature source"));
         }
         if !self
             .temperature_sources
             .iter()
             .any(|source| source.required)
         {
-            return Err(ConfigError(format!(
-                "fan {} must have at least one required temperature source",
-                self.id
-            )));
+            return Err(invalid(
+                "must have at least one required temperature source",
+            ));
         }
         let mut sensor_ids = HashSet::new();
         for source in &self.temperature_sources {
             require_id("sensor id", &source.id)?;
             require_text("sensor name", &source.name)?;
             if !sensor_ids.insert(&source.id) {
-                return Err(ConfigError(format!("duplicate sensor ID {}", source.id)));
+                return Err(FanError(format!("duplicate sensor ID {}", source.id)));
             }
             require_text("temperature hwmon name", &source.hwmon_name)?;
             require_text("temperature label", &source.label)?;
@@ -337,7 +287,7 @@ impl FanConfig {
             .as_ref()
             .is_some_and(|id| !sensor_ids.contains(id))
         {
-            return Err(ConfigError("unknown native hardware sensor ID".into()));
+            return Err(FanError("unknown native hardware sensor ID".into()));
         }
         let modes = &self.mode_values;
         if modes.automatic < 0
@@ -347,39 +297,26 @@ impl FanConfig {
             || modes.hardware_curve == Some(modes.automatic)
             || modes.hardware_curve == Some(modes.manual)
         {
-            return Err(ConfigError(format!(
-                "fan {} mode values must be distinct",
-                self.id
-            )));
+            return Err(invalid("mode values must be distinct"));
         }
         if self.backend == BackendPreference::HardwareCurve && modes.hardware_curve.is_none() {
-            return Err(ConfigError(format!(
-                "fan {} requests a hardware curve without a hardware mode value",
-                self.id
-            )));
+            return Err(invalid(
+                "requests a hardware curve without a hardware mode value",
+            ));
         }
         let limits = &self.limits;
         if limits.pwm_min >= limits.pwm_max {
-            return Err(ConfigError(format!(
-                "fan {} PWM minimum must be below its maximum",
-                self.id
-            )));
+            return Err(invalid("PWM minimum must be below its maximum"));
         }
         if limits.pwm_readback_tolerance >= limits.pwm_max - limits.pwm_min {
-            return Err(ConfigError(format!(
-                "fan {} PWM readback tolerance is invalid",
-                self.id
-            )));
+            return Err(invalid("PWM readback tolerance is invalid"));
         }
         if limits.minimum_percent > 100
             || limits.minimum_running_percent > 100
             || limits.minimum_running_percent == 0
             || limits.minimum_percent > limits.minimum_running_percent
         {
-            return Err(ConfigError(format!(
-                "fan {} percentage limits are invalid",
-                self.id
-            )));
+            return Err(invalid("percentage limits are invalid"));
         }
         if !limits.minimum_valid_temperature_c.is_finite()
             || !limits.stop_temperature_c.is_finite()
@@ -390,28 +327,22 @@ impl FanConfig {
                 && limits.restart_temperature_c < FULL_SPEED_TEMPERATURE_C
                 && FIRMWARE_HANDOFF_TEMPERATURE_C <= limits.maximum_valid_temperature_c)
         {
-            return Err(ConfigError(format!(
-                "fan {} temperature limits are invalid",
-                self.id
-            )));
+            return Err(invalid("temperature limits are invalid"));
         }
         if limits.maximum_valid_rpm == 0
             || limits.stall_rpm == 0
             || limits.stall_rpm >= limits.maximum_valid_rpm
             || limits.stall_grace_seconds == 0
         {
-            return Err(ConfigError(format!(
-                "fan {} RPM and stall limits are invalid",
-                self.id
-            )));
+            return Err(invalid("RPM and stall limits are invalid"));
         }
         Ok(())
     }
 }
 
-pub fn load_databases(platform_dir: &Path) -> Result<Vec<DeviceConfig>, ConfigError> {
+pub fn load_databases(platform_dir: &Path) -> Result<Vec<DeviceConfig>, FanError> {
     let directory = fs::read_dir(platform_dir).map_err(|error| {
-        ConfigError(format!(
+        FanError(format!(
             "unable to read fan platform directory {}: {error}",
             platform_dir.display()
         ))
@@ -420,7 +351,7 @@ pub fn load_databases(platform_dir: &Path) -> Result<Vec<DeviceConfig>, ConfigEr
     for entry in directory {
         let path = entry
             .map_err(|error| {
-                ConfigError(format!(
+                FanError(format!(
                     "unable to enumerate fan platform directory {}: {error}",
                     platform_dir.display()
                 ))
@@ -440,11 +371,11 @@ pub fn load_databases(platform_dir: &Path) -> Result<Vec<DeviceConfig>, ConfigEr
     let mut devices = Vec::new();
     for path in paths {
         let raw = fs::read_to_string(&path)
-            .map_err(|error| ConfigError(format!("unable to read {}: {error}", path.display())))?;
+            .map_err(|error| FanError(format!("unable to read {}: {error}", path.display())))?;
         let database: FanDatabase = serde_yaml::from_str(&raw)
-            .map_err(|error| ConfigError(format!("invalid {}: {error}", path.display())))?;
+            .map_err(|error| FanError(format!("invalid {}: {error}", path.display())))?;
         if database.schema_version != FAN_SCHEMA_VERSION {
-            return Err(ConfigError(format!(
+            return Err(FanError(format!(
                 "{} uses unsupported fan schema version {}",
                 path.display(),
                 database.schema_version
@@ -460,7 +391,7 @@ pub fn select_device(
     devices: &[DeviceConfig],
     dmi: &DmiInfo,
     compatible: &[String],
-) -> Result<Option<DeviceConfig>, ConfigError> {
+) -> Result<Option<DeviceConfig>, FanError> {
     let matches: Vec<&DeviceConfig> = devices
         .iter()
         .filter(|device| device.matches(dmi, compatible))
@@ -468,7 +399,7 @@ pub fn select_device(
     match matches.as_slice() {
         [] => Ok(None),
         [device] => Ok(Some((*device).clone())),
-        _ => Err(ConfigError(format!(
+        _ => Err(FanError(format!(
             "ambiguous fan configuration: platform identity matches {}",
             matches
                 .iter()
@@ -479,13 +410,13 @@ pub fn select_device(
     }
 }
 
-fn validate_devices(devices: &[DeviceConfig]) -> Result<(), ConfigError> {
+fn validate_devices(devices: &[DeviceConfig]) -> Result<(), FanError> {
     let mut device_ids = HashSet::new();
     for device in devices {
         require_id("device id", &device.id)?;
         require_text("device name", &device.name)?;
         if !device_ids.insert(device.id.clone()) {
-            return Err(ConfigError(format!("duplicate device id {}", device.id)));
+            return Err(FanError(format!("duplicate device id {}", device.id)));
         }
         if (device.dmi.is_empty() && device.device_tree.is_empty())
             || device.dmi.iter().any(DmiMatch::is_empty)
@@ -494,13 +425,13 @@ fn validate_devices(devices: &[DeviceConfig]) -> Result<(), ConfigError> {
                 .iter()
                 .any(|value| value.is_empty() || value.contains('\0'))
         {
-            return Err(ConfigError(format!(
+            return Err(FanError(format!(
                 "device {} must have non-empty DMI or Device Tree alternatives",
                 device.id
             )));
         }
         if device.fans.is_empty() {
-            return Err(ConfigError(format!(
+            return Err(FanError(format!(
                 "device {} must define at least one fan",
                 device.id
             )));
@@ -509,7 +440,7 @@ fn validate_devices(devices: &[DeviceConfig]) -> Result<(), ConfigError> {
         for fan in &device.fans {
             fan.validate()?;
             if !fan_ids.insert(fan.id.clone()) {
-                return Err(ConfigError(format!(
+                return Err(FanError(format!(
                     "device {} has duplicate fan id {}",
                     device.id, fan.id
                 )));
@@ -523,22 +454,22 @@ fn default_true() -> bool {
     true
 }
 
-fn require_id(kind: &str, value: &str) -> Result<(), ConfigError> {
+fn require_id(kind: &str, value: &str) -> Result<(), FanError> {
     require_text(kind, value)?;
     if !value
         .bytes()
         .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
     {
-        return Err(ConfigError(format!(
+        return Err(FanError(format!(
             "{kind} must use ASCII letters, numbers, '-' or '_'"
         )));
     }
     Ok(())
 }
 
-fn require_text(kind: &str, value: &str) -> Result<(), ConfigError> {
+fn require_text(kind: &str, value: &str) -> Result<(), FanError> {
     if value.trim().is_empty() || value.trim() != value {
-        return Err(ConfigError(format!("{kind} must be non-empty and trimmed")));
+        return Err(FanError(format!("{kind} must be non-empty and trimmed")));
     }
     Ok(())
 }
@@ -710,16 +641,7 @@ mod tests {
     #[test]
     fn invalid_curve_and_limits_are_rejected() {
         let fan = example_fan();
-        let descending = vec![
-            CurvePoint {
-                temperature_c: 55.0,
-                percent: 50,
-            },
-            CurvePoint {
-                temperature_c: 65.0,
-                percent: 40,
-            },
-        ];
+        let descending = vec![(55.0, 50), (65.0, 40)];
         assert!(fan.validate_curve("bad", &descending).is_err());
 
         let mut invalid = devices();
@@ -730,19 +652,7 @@ mod tests {
         cannot_stop.limits.minimum_percent = 20;
         cannot_stop.limits.minimum_running_percent = 20;
         assert!(cannot_stop
-            .validate_curve(
-                "zero is unsupported",
-                &[
-                    CurvePoint {
-                        temperature_c: 45.0,
-                        percent: 0
-                    },
-                    CurvePoint {
-                        temperature_c: 95.0,
-                        percent: 100
-                    }
-                ]
-            )
+            .validate_curve("zero is unsupported", &[(45.0, 0), (95.0, 100)])
             .is_err());
 
         let mut invalid_modes = devices();
