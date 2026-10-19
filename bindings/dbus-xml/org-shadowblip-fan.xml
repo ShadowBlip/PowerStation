@@ -35,13 +35,13 @@
   </interface>
   <interface name="org.shadowblip.Fan">
     <!--
-     Load a YAML profile from a readable regular file descriptor. The complete profile is validated before changing any fan.
+     Load a YAML profile from a caller-opened readable regular file, including arbitrary paths and symlinks. Pipes, sockets, devices, directories and unreadable descriptors are rejected. Input is limited to 64 KiB and copied without reopening the path or changing the shared offset. The complete profile is validated before changing any fan.
      -->
     <method name="LoadProfile">
       <arg name="file" type="h" direction="in" />
     </method>
     <!--
-     Load a profile as a JSON string. Clients must handle saving and reloading the profile after service startup.
+     Load a profile as a JSON string, limited to 64 KiB. The complete profile is validated before changing any fan. Clients must handle saving and reloading the profile after service startup.
      -->
     <method name="LoadProfileJson">
       <arg name="json" type="s" direction="in" />

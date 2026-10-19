@@ -24,7 +24,7 @@ impl FanBus {
 
 #[interface(name = "org.shadowblip.Fan")]
 impl FanBus {
-    /// Load a YAML profile from a readable regular file descriptor. The complete profile is validated before changing any fan.
+    /// Load a YAML profile from a caller-opened readable regular file, including arbitrary paths and symlinks. Pipes, sockets, devices, directories and unreadable descriptors are rejected. Input is limited to 64 KiB and copied without reopening the path or changing the shared offset. The complete profile is validated before changing any fan.
     pub async fn load_profile(
         &self,
         file: OwnedFd,
@@ -35,7 +35,7 @@ impl FanBus {
         result.map_err(|error| fdo::Error::Failed(error.to_string()))
     }
 
-    /// Load a profile as a JSON string. Clients must handle saving and reloading the profile after service startup.
+    /// Load a profile as a JSON string, limited to 64 KiB. The complete profile is validated before changing any fan. Clients must handle saving and reloading the profile after service startup.
     pub async fn load_profile_json(
         &self,
         json: &str,

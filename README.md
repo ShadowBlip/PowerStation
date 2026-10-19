@@ -86,16 +86,14 @@ busctl tree org.shadowblip.PowerStation
       │ ├─ /org/shadowblip/Performance/CPU/Core7
       │ ├─ /org/shadowblip/Performance/CPU/Core8
       │ └─ /org/shadowblip/Performance/CPU/Core9
-      ├─ /org/shadowblip/Performance/GPU
-      │ ├─ /org/shadowblip/Performance/GPU/Card1
-      │ │ └─ /org/shadowblip/Performance/GPU/Card1/HDMI
-      │ │   └─ /org/shadowblip/Performance/GPU/Card1/HDMI/A
-      │ │     └─ /org/shadowblip/Performance/GPU/Card1/HDMI/A/1
-      │ └─ /org/shadowblip/Performance/GPU/Card2
-      │   └─ /org/shadowblip/Performance/GPU/Card2/eDP
-      │     └─ /org/shadowblip/Performance/GPU/Card2/eDP/1
-      └─ /org/shadowblip/Performance/Fan
-        └─ /org/shadowblip/Performance/Fan/Fan0
+      └─ /org/shadowblip/Performance/GPU
+        ├─ /org/shadowblip/Performance/GPU/Card1
+        │ └─ /org/shadowblip/Performance/GPU/Card1/HDMI
+        │   └─ /org/shadowblip/Performance/GPU/Card1/HDMI/A
+        │     └─ /org/shadowblip/Performance/GPU/Card1/HDMI/A/1
+        └─ /org/shadowblip/Performance/GPU/Card2
+          └─ /org/shadowblip/Performance/GPU/Card2/eDP
+            └─ /org/shadowblip/Performance/GPU/Card2/eDP/1
 ```
 
 ```bash
@@ -148,10 +146,6 @@ When PowerStation is running, you can test setting properties with:
 busctl set-property org.shadowblip.PowerStation /org/shadowblip/Performance/CPU/Core11 org.shadowblip.CPU.Core Online "b" False
 ```
 
-
-## Fan control
-
-The experimental fan interface loads complete YAML profiles through caller-opened file descriptors, or JSON profiles through `LoadProfileJson`. Its integer revision marker remains provisional. Fresh service starts, restarts and reboots enter firmware Automatic; applications own saving and reloading profiles. Successful suspend/resume retains the live profile in memory. See [profiles and examples](./docs/fan-platform-yaml.md). D-Bus activation and systemd recovery are included in archive and RPM assets.
 
 ## License
 
