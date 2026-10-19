@@ -49,3 +49,6 @@ impl From<zbus::fdo::Error> for FanError {
         Self::new(error)
     }
 }
+
+#[cfg(test)]
+mod test_support;

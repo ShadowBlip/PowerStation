@@ -708,67 +708,42 @@ fn read_integer(path: &Path) -> Result<i64, FanError> {
 
 #[cfg(test)]
 mod tests {
+    use super::super::config::{BackendPreference, TemperatureSource};
+    use super::super::test_support::{example_fan, hwmon, write as write_file, TempTree};
     use super::*;
-    use crate::performance::fan::config::{
-        BackendPreference, FanLimits, HwmonSelector, ModeValues, TemperatureSource,
-    };
-    use std::sync::atomic::{AtomicU64, Ordering};
-
-    static NEXT_ID: AtomicU64 = AtomicU64::new(0);
 
     struct Fixture {
-        root: PathBuf,
+        root: TempTree,
         state: PathBuf,
     }
 
     impl Fixture {
         fn new(hardware_points: usize) -> Self {
-            let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
-            let root = std::env::temp_dir().join(format!(
-                "powerstation-fan-controller-{}-{id}",
-                std::process::id()
-            ));
-            let _ = fs::remove_dir_all(&root);
-            let fan = root.join("sys/class/hwmon/hwmon2");
-            write_file(fan.join("name"), "example_ec\n");
-            write_file(
-                fan.join("device/uevent"),
-                "DRIVER=example-ec\nDEVPATH=/devices/platform/example-ec\n",
+            let root = TempTree::new();
+            hwmon(
+                &root.path().join("sys"),
+                &example_fan(),
+                2,
+                hardware_points,
+                40000,
             );
-            write_file(fan.join("pwm1"), "100\n");
-            write_file(fan.join("pwm1_enable"), "2\n");
-            write_file(fan.join("fan1_input"), "1200\n");
-            for index in 1..=hardware_points {
-                write_file(
-                    fan.join(format!("pwm1_auto_point{index}_temp")),
-                    &format!("{}000\n", 40 + index * 10),
-                );
-                write_file(
-                    fan.join(format!("pwm1_auto_point{index}_pwm")),
-                    &format!("{}\n", index * 30),
-                );
-            }
-            let sensor = root.join("sys/class/hwmon/hwmon9");
-            write_file(sensor.join("name"), "k10temp\n");
-            write_file(sensor.join("temp1_label"), "Tctl\n");
-            write_file(sensor.join("temp1_input"), "40000\n");
             Self {
-                state: root.join("state/fan-state.yaml"),
+                state: root.path().join("state/fan-state.yaml"),
                 root,
             }
         }
 
         fn sysfs(&self) -> PathBuf {
-            self.root.join("sys")
+            self.root.path().join("sys")
         }
 
         fn fan(&self, name: &str) -> PathBuf {
-            self.root.join("sys/class/hwmon/hwmon2").join(name)
+            self.sysfs().join("class/hwmon/hwmon2").join(name)
         }
 
         fn temperature(&self, value: f64) {
             write_file(
-                self.root.join("sys/class/hwmon/hwmon9/temp1_input"),
+                self.sysfs().join("class/hwmon/hwmon9/temp1_input"),
                 &format!("{}\n", (value * 1000.0).round() as i64),
             );
         }
@@ -778,56 +753,10 @@ mod tests {
         }
     }
 
-    impl Drop for Fixture {
-        fn drop(&mut self) {
-            let _ = fs::remove_dir_all(&self.root);
-        }
-    }
-
-    fn write_file(path: impl AsRef<Path>, value: &str) {
-        let path = path.as_ref();
-        fs::create_dir_all(path.parent().unwrap()).unwrap();
-        fs::write(path, value).unwrap();
-    }
-
     fn config(backend: BackendPreference) -> FanConfig {
         FanConfig {
-            id: "system".into(),
-            name: "System Fan".into(),
-            hwmon: HwmonSelector {
-                name: "example_ec".into(),
-                parent_driver: "example-ec".into(),
-                channel: 1,
-            },
-            temperature_sources: vec![TemperatureSource {
-                id: "cpu".into(),
-                name: "CPU".into(),
-                hwmon_name: "k10temp".into(),
-                label: "Tctl".into(),
-                required: true,
-            }],
             backend,
-            mode_values: ModeValues {
-                automatic: 2,
-                manual: 1,
-                hardware_curve: Some(5),
-            },
-            manual_write_order: ManualWriteOrder::PwmThenEnable,
-            limits: FanLimits {
-                pwm_min: 0,
-                pwm_max: 255,
-                pwm_readback_tolerance: 3,
-                minimum_percent: 0,
-                minimum_running_percent: 10,
-                stop_temperature_c: 42.0,
-                restart_temperature_c: 45.0,
-                stall_rpm: 100,
-                stall_grace_seconds: 3,
-                minimum_valid_temperature_c: 0.0,
-                maximum_valid_temperature_c: 110.0,
-                maximum_valid_rpm: 20_000,
-            },
-            firmware_curve_sensor: Some("cpu".into()),
+            ..example_fan()
         }
     }
 
@@ -927,7 +856,7 @@ mod tests {
         let fixture = Fixture::new(0);
         let mut controller = controller(&fixture, BackendPreference::Auto);
         controller.set_manual(20).unwrap();
-        let sensor = fixture.root.join("sys/class/hwmon/hwmon9/temp1_input");
+        let sensor = fixture.sysfs().join("class/hwmon/hwmon9/temp1_input");
         fs::remove_file(&sensor).unwrap();
         assert!(controller.tick().is_err());
         assert_eq!(controller.snapshot().temperature_c, None);
@@ -1031,7 +960,7 @@ mod tests {
         assert_eq!(read_integer(&fixture.fan("pwm1_enable")).unwrap(), 2);
 
         controller.set_manual(20).unwrap();
-        fs::remove_file(fixture.root.join("sys/class/hwmon/hwmon9/temp1_input")).unwrap();
+        fs::remove_file(fixture.sysfs().join("class/hwmon/hwmon9/temp1_input")).unwrap();
         assert!(controller.tick().is_err());
         assert_eq!(read_integer(&fixture.fan("pwm1_enable")).unwrap(), 2);
     }
@@ -1065,13 +994,13 @@ mod tests {
         controller.prepare_for_sleep().unwrap();
         assert_eq!(read_integer(&fixture.fan("pwm1_enable")).unwrap(), 2);
         fs::rename(
-            fixture.root.join("sys/class/hwmon/hwmon2"),
-            fixture.root.join("sys/class/hwmon/hwmon7"),
+            fixture.sysfs().join("class/hwmon/hwmon2"),
+            fixture.sysfs().join("class/hwmon/hwmon7"),
         )
         .unwrap();
         controller.resume().unwrap();
         assert_eq!(
-            read_integer(&fixture.root.join("sys/class/hwmon/hwmon7/pwm1_enable")).unwrap(),
+            read_integer(&fixture.sysfs().join("class/hwmon/hwmon7/pwm1_enable")).unwrap(),
             1
         );
         assert_eq!(controller.snapshot().effective_percent, Some(30));
@@ -1083,14 +1012,14 @@ mod tests {
         let mut controller = controller(&fixture, BackendPreference::Auto);
         controller.set_manual(20).unwrap();
         write_file(
-            fixture.root.join("sys/class/hwmon/hwmon9/temp1_input"),
+            fixture.sysfs().join("class/hwmon/hwmon9/temp1_input"),
             "not-a-temperature\n",
         );
         assert!(controller.tick().is_err());
         assert_eq!(read_integer(&fixture.fan("pwm1_enable")).unwrap(), 2);
 
         write_file(
-            fixture.root.join("sys/class/hwmon/hwmon9/temp1_input"),
+            fixture.sysfs().join("class/hwmon/hwmon9/temp1_input"),
             "40000\n",
         );
         controller.set_manual(20).unwrap();
@@ -1105,10 +1034,10 @@ mod tests {
         let fixture = Fixture::new(0);
         let mut controller = controller(&fixture, BackendPreference::Auto);
         controller.set_manual(20).unwrap();
-        let old_fan = fixture.root.join("sys/class/hwmon/hwmon2");
-        let new_fan = fixture.root.join("sys/class/hwmon/hwmon7");
+        let old_fan = fixture.sysfs().join("class/hwmon/hwmon2");
+        let new_fan = fixture.sysfs().join("class/hwmon/hwmon7");
         fs::rename(&old_fan, &new_fan).unwrap();
-        fs::remove_file(fixture.root.join("sys/class/hwmon/hwmon9/temp1_input")).unwrap();
+        fs::remove_file(fixture.sysfs().join("class/hwmon/hwmon9/temp1_input")).unwrap();
 
         assert!(controller.tick().is_err());
         assert_eq!(read_integer(&new_fan.join("pwm1_enable")).unwrap(), 2);
@@ -1118,7 +1047,7 @@ mod tests {
     #[test]
     fn hottest_configured_sensor_drives_the_curve() {
         let fixture = Fixture::new(0);
-        let second = fixture.root.join("sys/class/hwmon/hwmon10");
+        let second = fixture.sysfs().join("class/hwmon/hwmon10");
         write_file(second.join("name"), "acpitz\n");
         write_file(second.join("temp2_label"), "Board\n");
         write_file(second.join("temp2_input"), "60000\n");
@@ -1172,7 +1101,7 @@ mod tests {
             controller.shutdown().unwrap();
             assert_eq!(fs::read_to_string(&fixture.state).unwrap(), stale);
         }
-        fs::remove_file(fixture.root.join("sys/class/hwmon/hwmon9/temp1_input")).unwrap();
+        fs::remove_file(fixture.sysfs().join("class/hwmon/hwmon9/temp1_input")).unwrap();
         let mut controller = FanController::new(
             "example".into(),
             config(BackendPreference::Auto),
@@ -1188,7 +1117,7 @@ mod tests {
     #[test]
     fn selected_sensor_does_not_replace_required_safety_sensors() {
         let fixture = Fixture::new(0);
-        let board = fixture.root.join("sys/class/hwmon/hwmon10");
+        let board = fixture.sysfs().join("class/hwmon/hwmon10");
         write_file(board.join("name"), "acpitz");
         write_file(board.join("temp2_label"), "Board");
         write_file(board.join("temp2_input"), "60000");
@@ -1244,9 +1173,9 @@ mod tests {
     fn pwm_conversion_and_readback_tolerance_cover_boundaries() {
         let fixture = Fixture::new(0);
         let config = config(BackendPreference::Auto);
-        assert_eq!(percent_to_raw(0, &config), 0);
-        assert_eq!(percent_to_raw(50, &config), 128);
-        assert_eq!(percent_to_raw(100, &config), 255);
+        for (case, percent, raw) in [("zero", 0, 0), ("midpoint", 50, 128), ("full", 100, 255)] {
+            assert_eq!(percent_to_raw(percent, &config), raw, "{case}");
+        }
         write_file(fixture.fan("pwm1"), "131");
         assert!(read_verify_tolerance(&fixture.fan("pwm1"), 128, 3).is_ok());
         assert!(read_verify_tolerance(&fixture.fan("pwm1"), 128, 2).is_err());
@@ -1257,22 +1186,25 @@ mod tests {
         let mut controller = controller(&fixture, BackendPreference::Auto);
         controller.set_manual(20).unwrap();
         let before = controller.snapshot();
-        for points in [
-            vec![(55.0, 10), (45.0, 100)],
-            vec![(45.0, 10), (45.0, 100)],
-            vec![(45.0, 40), (70.0, 30), (95.0, 100)],
-            vec![(45.0, 10), (95.0, 90)],
-            vec![(45.0, 10), (96.0, 100)],
-            vec![(f64::NAN, 10), (95.0, 100)],
-            vec![(45.0, 101), (95.0, 100)],
+        for (case, points) in [
+            ("descending temperature", vec![(55.0, 10), (45.0, 100)]),
+            ("duplicate temperature", vec![(45.0, 10), (45.0, 100)]),
+            ("descending duty", vec![(45.0, 40), (70.0, 30), (95.0, 100)]),
+            ("missing full speed", vec![(45.0, 10), (95.0, 90)]),
+            (
+                "above full-speed temperature",
+                vec![(45.0, 10), (96.0, 100)],
+            ),
+            ("nonfinite temperature", vec![(f64::NAN, 10), (95.0, 100)]),
+            ("duty above 100", vec![(45.0, 101), (95.0, 100)]),
         ] {
             let profile = FanProfile {
                 curve: points,
                 ..quiet(&controller)
             };
-            assert!(controller.configure(profile).is_err());
-            assert_eq!(controller.snapshot(), before);
-            assert_eq!(read_integer(&fixture.fan("pwm1")).unwrap(), 51);
+            assert!(controller.configure(profile).is_err(), "{case}");
+            assert_eq!(controller.snapshot(), before, "{case}");
+            assert_eq!(read_integer(&fixture.fan("pwm1")).unwrap(), 51, "{case}");
         }
         let unsupported = FanProfile {
             mode: FanMode::FirmwareCurve,

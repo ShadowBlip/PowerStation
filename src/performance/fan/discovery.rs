@@ -377,100 +377,11 @@ fn read_trimmed(path: PathBuf) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
+    use super::super::test_support::{example_fan as config, hwmon, write, TempTree};
     use super::*;
-    use crate::performance::fan::config::{FanLimits, HwmonSelector, ManualWriteOrder, ModeValues};
-    use std::sync::atomic::{AtomicU64, Ordering};
-
-    static NEXT_ID: AtomicU64 = AtomicU64::new(0);
-
-    struct TempTree(PathBuf);
-
-    impl TempTree {
-        fn new() -> Self {
-            let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
-            let path = std::env::temp_dir().join(format!(
-                "powerstation-fan-discovery-{}-{id}",
-                std::process::id()
-            ));
-            let _ = fs::remove_dir_all(&path);
-            fs::create_dir_all(&path).unwrap();
-            Self(path)
-        }
-
-        fn path(&self) -> &Path {
-            &self.0
-        }
-    }
-
-    impl Drop for TempTree {
-        fn drop(&mut self) {
-            let _ = fs::remove_dir_all(&self.0);
-        }
-    }
-
-    fn config() -> FanConfig {
-        FanConfig {
-            id: "system".into(),
-            name: "System Fan".into(),
-            hwmon: HwmonSelector {
-                name: "example_ec".into(),
-                parent_driver: "example-ec".into(),
-                channel: 1,
-            },
-            temperature_sources: vec![TemperatureSource {
-                id: "cpu".into(),
-                name: "CPU".into(),
-                hwmon_name: "k10temp".into(),
-                label: "Tctl".into(),
-                required: true,
-            }],
-            backend: BackendPreference::Auto,
-            mode_values: ModeValues {
-                automatic: 2,
-                manual: 1,
-                hardware_curve: Some(5),
-            },
-            manual_write_order: ManualWriteOrder::PwmThenEnable,
-            limits: FanLimits {
-                pwm_min: 0,
-                pwm_max: 255,
-                pwm_readback_tolerance: 3,
-                minimum_percent: 0,
-                minimum_running_percent: 10,
-                stop_temperature_c: 42.0,
-                restart_temperature_c: 45.0,
-                stall_rpm: 100,
-                stall_grace_seconds: 3,
-                minimum_valid_temperature_c: 0.0,
-                maximum_valid_temperature_c: 110.0,
-                maximum_valid_rpm: 20_000,
-            },
-            firmware_curve_sensor: Some("cpu".into()),
-        }
-    }
-
-    fn write(path: impl AsRef<Path>, value: &str) {
-        let path = path.as_ref();
-        fs::create_dir_all(path.parent().unwrap()).unwrap();
-        fs::write(path, value).unwrap();
-    }
 
     fn fixture(tree: &TempTree, fan_index: u8) {
-        let root = tree.path().join("class/hwmon");
-        let fan = root.join(format!("hwmon{fan_index}"));
-        write(fan.join("name"), "example_ec\n");
-        write(
-            fan.join("device/uevent"),
-            "DRIVER=example-ec\nDEVPATH=/devices/platform/example-ec\n",
-        );
-        write(fan.join("pwm1"), "100\n");
-        write(fan.join("pwm1_enable"), "2\n");
-        write(fan.join("fan1_input"), "1200\n");
-
-        let sensor = root.join("hwmon9");
-        write(sensor.join("name"), "k10temp\n");
-        write(sensor.join("temp1_label"), "Tctl\n");
-        write(sensor.join("temp1_input"), "42000\n");
+        hwmon(tree.path(), &config(), fan_index, 0, 42000);
     }
 
     #[test]

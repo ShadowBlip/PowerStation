@@ -175,6 +175,7 @@ pub fn load_profile(file: &fs::File) -> Result<(Profile, String), FanError> {
 
 #[cfg(test)]
 mod tests {
+    use super::super::test_support::TempTree;
     use super::*;
 
     const YAML: &str = "name: Quiet\nfans:\n  - fan: ayaneo-3/system\n    mode: software_curve\n    sensors: [ayaneo-3/system/cpu]\n    curve: [[45, 0], [95, 100]]\n";
@@ -207,9 +208,8 @@ mod tests {
     #[test]
     fn descriptor_uses_open_file_not_path_or_shared_offset() {
         use std::io::{Seek, SeekFrom};
-        let root =
-            std::env::temp_dir().join(format!("powerstation-profile-fd-{}", std::process::id()));
-        fs::create_dir_all(&root).unwrap();
+        let tree = TempTree::new();
+        let root = tree.path();
         let path = root.join("profile.yaml");
         let link = root.join("nix-profile.yaml");
         fs::write(&path, YAML).unwrap();
@@ -227,7 +227,6 @@ mod tests {
         assert!(load_profile(&file).is_err());
         fs::write(root.join("old.yaml"), " ".repeat(MAX_PROFILE_BYTES + 1)).unwrap();
         assert!(load_profile(&file).is_err());
-        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
@@ -248,8 +247,8 @@ mod tests {
         let reader = unsafe { fs::File::from_raw_fd(pipe[0]) };
         let _writer = unsafe { fs::File::from_raw_fd(pipe[1]) };
         assert!(load_profile(&reader).is_err());
-        let path =
-            std::env::temp_dir().join(format!("powerstation-unreadable-fd-{}", std::process::id()));
+        let tree = TempTree::new();
+        let path = tree.path().join("profile.yaml");
         let writer = fs::File::create(&path).unwrap();
         assert!(load_profile(&writer).is_err());
         let path_only = fs::OpenOptions::new()
@@ -258,7 +257,6 @@ mod tests {
             .open(&path)
             .unwrap();
         assert!(load_profile(&path_only).is_err());
-        fs::remove_file(path).unwrap();
     }
 
     #[test]

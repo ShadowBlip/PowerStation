@@ -701,62 +701,20 @@ fn configured_path(variable: &str, default: &str) -> PathBuf {
 mod tests {
     use super::*;
     use std::fs;
-    use std::sync::atomic::AtomicU64;
     use tokio::net::UnixStream;
     use zbus::zvariant::OwnedObjectPath;
 
-    static NEXT_ID: AtomicU64 = AtomicU64::new(0);
-
-    struct TempTree(PathBuf);
-
-    impl TempTree {
-        fn new() -> Self {
-            let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
-            let path = std::env::temp_dir().join(format!(
-                "powerstation-fan-manager-{}-{id}",
-                std::process::id()
-            ));
-            let _ = fs::remove_dir_all(&path);
-            fs::create_dir_all(&path).unwrap();
-            Self(path)
-        }
-
-        fn path(&self) -> &Path {
-            &self.0
-        }
-    }
-
-    impl Drop for TempTree {
-        fn drop(&mut self) {
-            let _ = fs::remove_dir_all(&self.0);
-        }
-    }
-
-    fn write(path: impl AsRef<Path>, value: &str) {
-        let path = path.as_ref();
-        fs::create_dir_all(path.parent().unwrap()).unwrap();
-        fs::write(path, value).unwrap();
-    }
+    use super::super::test_support::{example_fan, hwmon, write, TempTree};
 
     fn ayaneo_fixture(tree: &TempTree) {
         let root = tree.path();
         write(root.join("class/dmi/id/sys_vendor"), "AYANEO\n");
         write(root.join("class/dmi/id/product_name"), "AYANEO 3\n");
-
-        let fan = root.join("class/hwmon/hwmon2");
-        write(fan.join("name"), "ayaneo_ec\n");
-        write(
-            fan.join("device/uevent"),
-            "DRIVER=ayaneo-ec\nDEVPATH=/devices/platform/ayaneo-ec\n",
-        );
-        write(fan.join("pwm1"), "128\n");
-        write(fan.join("pwm1_enable"), "2\n");
-        write(fan.join("fan1_input"), "1200\n");
-
-        let sensor = root.join("class/hwmon/hwmon9");
-        write(sensor.join("name"), "k10temp\n");
-        write(sensor.join("temp1_label"), "Tctl\n");
-        write(sensor.join("temp1_input"), "50000\n");
+        let mut config = example_fan();
+        config.hwmon.name = "ayaneo_ec".into();
+        config.hwmon.parent_driver = "ayaneo-ec".into();
+        hwmon(root, &config, 2, 0, 50000);
+        write(root.join("class/hwmon/hwmon2/pwm1"), "128\n");
     }
 
     #[test]
@@ -1041,6 +999,24 @@ mod tests {
         assert_eq!(restarted.current_profile().await.0, "");
     }
 
+    async fn proxy<'a>(
+        connection: &Connection,
+        path: &'a str,
+        interface: &'a str,
+    ) -> zbus::Proxy<'a> {
+        zbus::proxy::Builder::new(connection)
+            .destination("org.shadowblip.PowerStation")
+            .unwrap()
+            .path(path)
+            .unwrap()
+            .interface(interface)
+            .unwrap()
+            .cache_properties(zbus::proxy::CacheProperties::No)
+            .build()
+            .await
+            .unwrap()
+    }
+
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn dbus_v2_profiles_percentages_sensors_and_fault_notifications() {
         let tree = TempTree::new();
@@ -1058,17 +1034,7 @@ mod tests {
             .build();
         let (server, client) = tokio::try_join!(server, client).unwrap();
         manager.register(&server).await.unwrap();
-        let collection: zbus::Proxy<'_> = zbus::proxy::Builder::new(&client)
-            .destination("org.shadowblip.PowerStation")
-            .unwrap()
-            .path(FAN_PATH)
-            .unwrap()
-            .interface("org.shadowblip.Fan")
-            .unwrap()
-            .cache_properties(zbus::proxy::CacheProperties::No)
-            .build()
-            .await
-            .unwrap();
+        let collection = proxy(&client, FAN_PATH, "org.shadowblip.Fan").await;
         assert_eq!(
             collection.get_property::<u32>("ApiVersion").await.unwrap(),
             2
@@ -1077,28 +1043,8 @@ mod tests {
         let sensors: Vec<OwnedObjectPath> = collection.call("EnumerateSensors", &()).await.unwrap();
         assert_eq!(fans.len(), 1);
         assert_eq!(sensors.len(), 1);
-        let device: zbus::Proxy<'_> = zbus::proxy::Builder::new(&client)
-            .destination("org.shadowblip.PowerStation")
-            .unwrap()
-            .path(fans[0].as_str())
-            .unwrap()
-            .interface("org.shadowblip.Fan.Device")
-            .unwrap()
-            .cache_properties(zbus::proxy::CacheProperties::No)
-            .build()
-            .await
-            .unwrap();
-        let sensor: zbus::Proxy<'_> = zbus::proxy::Builder::new(&client)
-            .destination("org.shadowblip.PowerStation")
-            .unwrap()
-            .path(sensors[0].as_str())
-            .unwrap()
-            .interface("org.shadowblip.Fan.Sensor")
-            .unwrap()
-            .cache_properties(zbus::proxy::CacheProperties::No)
-            .build()
-            .await
-            .unwrap();
+        let device = proxy(&client, fans[0].as_str(), "org.shadowblip.Fan.Device").await;
+        let sensor = proxy(&client, sensors[0].as_str(), "org.shadowblip.Fan.Sensor").await;
         assert_eq!(
             device.get_property::<String>("Id").await.unwrap(),
             "ayaneo-3/system"

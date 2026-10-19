@@ -476,48 +476,8 @@ fn require_text(kind: &str, value: &str) -> Result<(), FanError> {
 
 #[cfg(test)]
 mod tests {
+    use super::super::test_support::{example_fan, TempTree};
     use super::*;
-
-    fn example_fan() -> FanConfig {
-        FanConfig {
-            id: "system".into(),
-            name: "System Fan".into(),
-            hwmon: HwmonSelector {
-                name: "example_ec".into(),
-                parent_driver: "example-ec".into(),
-                channel: 1,
-            },
-            temperature_sources: vec![TemperatureSource {
-                id: "cpu".into(),
-                name: "CPU".into(),
-                hwmon_name: "k10temp".into(),
-                label: "Tctl".into(),
-                required: true,
-            }],
-            backend: BackendPreference::Auto,
-            mode_values: ModeValues {
-                automatic: 2,
-                manual: 1,
-                hardware_curve: Some(5),
-            },
-            manual_write_order: ManualWriteOrder::PwmThenEnable,
-            limits: FanLimits {
-                pwm_min: 0,
-                pwm_max: 255,
-                pwm_readback_tolerance: 3,
-                minimum_percent: 0,
-                minimum_running_percent: 10,
-                stop_temperature_c: 42.0,
-                restart_temperature_c: 45.0,
-                stall_rpm: 100,
-                stall_grace_seconds: 3,
-                minimum_valid_temperature_c: 0.0,
-                maximum_valid_temperature_c: 110.0,
-                maximum_valid_rpm: 20_000,
-            },
-            firmware_curve_sensor: Some("cpu".into()),
-        }
-    }
 
     fn devices() -> Vec<DeviceConfig> {
         vec![DeviceConfig {
@@ -618,8 +578,8 @@ mod tests {
 
     #[test]
     fn reads_nul_separated_device_tree_property() {
-        let path =
-            std::env::temp_dir().join(format!("powerstation-compatible-{}", std::process::id()));
+        let tree = TempTree::new();
+        let path = tree.path().join("compatible");
         assert!(read_device_tree(&path).unwrap().is_empty());
         fs::write(&path, b"vendor,handheld\0vendor,soc\0").unwrap();
         assert_eq!(
@@ -635,7 +595,6 @@ mod tests {
             fs::write(&path, invalid).unwrap();
             assert!(read_device_tree(&path).is_err());
         }
-        fs::remove_file(path).unwrap();
     }
 
     #[test]
