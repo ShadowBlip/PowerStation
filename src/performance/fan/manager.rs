@@ -1,9 +1,7 @@
 use super::config::{load_databases, read_device_tree, select_device, DmiInfo, FanConfig};
-use super::controller::{
-    restore_automatic_for_config, ControllerError, FanController, FanSnapshot,
-};
+use super::controller::{restore_automatic_for_config, ControllerError, FanController};
 use super::dbus::{FanBus, FanDevice, FanSensor};
-use super::profile::{load_profile, Profile, DEFAULT_OVERRIDE_DIR, DEFAULT_PROFILE_DIR};
+use super::profile::{load_profile, Profile};
 use crate::constants::FAN_PATH;
 use futures_util::{FutureExt, StreamExt};
 use std::fmt::{Display, Formatter};
@@ -65,8 +63,6 @@ struct LoadedProfile {
 #[derive(Clone)]
 pub struct FanManager {
     profile: Arc<Mutex<Option<LoadedProfile>>>,
-    profile_dir: PathBuf,
-    override_dir: PathBuf,
     controllers: Vec<(String, Arc<Mutex<FanController>>)>,
     monitor_health: Arc<Vec<StdMutex<Instant>>>,
     sleep_monitor_healthy: Arc<AtomicBool>,
@@ -78,8 +74,6 @@ impl FanManager {
     fn empty() -> Self {
         Self {
             profile: Arc::new(Mutex::new(None)),
-            profile_dir: DEFAULT_PROFILE_DIR.into(),
-            override_dir: DEFAULT_OVERRIDE_DIR.into(),
             controllers: Vec::new(),
             monitor_health: Arc::new(Vec::new()),
             sleep_monitor_healthy: Arc::new(AtomicBool::new(true)),
@@ -114,8 +108,6 @@ impl FanManager {
             log::info!("No fan platform configuration matches this system");
             return Ok(Self {
                 profile: Arc::new(Mutex::new(None)),
-                profile_dir: DEFAULT_PROFILE_DIR.into(),
-                override_dir: DEFAULT_OVERRIDE_DIR.into(),
                 controllers: Vec::new(),
                 monitor_health: Arc::new(Vec::new()),
                 sleep_monitor_healthy: Arc::new(AtomicBool::new(true)),
@@ -152,11 +144,6 @@ impl FanManager {
             .collect();
         Ok(Self {
             profile: Arc::new(Mutex::new(None)),
-            profile_dir: configured_path("POWERSTATION_FAN_PROFILE_DIR", DEFAULT_PROFILE_DIR),
-            override_dir: configured_path(
-                "POWERSTATION_FAN_PROFILE_OVERRIDE_DIR",
-                DEFAULT_OVERRIDE_DIR,
-            ),
             controllers,
             monitor_health: Arc::new(monitor_health),
             sleep_monitor_healthy: Arc::new(AtomicBool::new(false)),
@@ -197,104 +184,29 @@ impl FanManager {
         (loaded.profile.name.clone(), loaded.path.clone())
     }
 
-    /// Startup restoration is only eligible before any profile is selected.
-    pub async fn startup_restore_ready(&self) -> bool {
-        let loaded = self.profile.lock().await;
-        let mut snapshots = Vec::new();
-        for (_, controller) in &self.controllers {
-            snapshots.push(controller.lock().await.snapshot());
-        }
-        self.startup_snapshots_ready(loaded.is_none(), &snapshots)
-    }
-
-    fn startup_snapshots_ready(&self, untouched: bool, snapshots: &[FanSnapshot]) -> bool {
-        if !untouched
-            || snapshots.is_empty()
-            || !self.custom_control_allowed.load(Ordering::Acquire)
-            || !self.sleep_monitor_healthy.load(Ordering::Acquire)
-        {
-            return false;
-        }
-        for snapshot in snapshots {
-            if snapshot.mode != "automatic"
-                || snapshot.suspended
-                || !snapshot.automatic_verified
-                || snapshot.fault.is_some()
-                || snapshot.temperature_c.is_none()
-            {
-                return false;
-            }
-        }
-        true
-    }
-
-    pub async fn load_profile_file(&self, file: &str) -> Result<(), ManagerError> {
-        let (profile, path) = load_profile(file, &self.profile_dir, &self.override_dir)
-            .map_err(|error| ManagerError(error.to_string()))?;
-        self.apply_profile(profile, path.to_string_lossy().into_owned(), None)
-            .await
+    pub async fn load_profile_fd(&self, fd: OwnedFd) -> Result<(), ManagerError> {
+        let (profile, path) = tokio::task::spawn_blocking(move || {
+            let file = std::fs::File::from(std::os::fd::OwnedFd::from(fd));
+            load_profile(&file)
+        })
+        .await
+        .map_err(|error| ManagerError(error.to_string()))?
+        .map_err(|error| ManagerError(error.to_string()))?;
+        self.apply_profile(profile, path).await
     }
 
     pub async fn load_profile_json(&self, json: &str) -> Result<(), ManagerError> {
         let profile = Profile::from_json(json).map_err(|error| ManagerError(error.to_string()))?;
-        self.apply_profile(profile, String::new(), None).await
+        self.apply_profile(profile, String::new()).await
     }
 
-    pub async fn load_startup_profile_json(
-        &self,
-        boot: &str,
-        invocation: &str,
-        json: &str,
-    ) -> Result<(), ManagerError> {
-        let profile = Profile::from_json(json).map_err(|error| ManagerError(error.to_string()))?;
-        self.apply_profile(profile, String::new(), Some((boot, invocation)))
-            .await
-    }
-
-    pub async fn load_startup_profile_file(
-        &self,
-        boot: &str,
-        invocation: &str,
-        file: &str,
-    ) -> Result<(), ManagerError> {
-        let (profile, path) = load_profile(file, &self.profile_dir, &self.override_dir)
-            .map_err(|error| ManagerError(error.to_string()))?;
-        self.apply_profile(
-            profile,
-            path.to_string_lossy().into_owned(),
-            Some((boot, invocation)),
-        )
-        .await
-    }
-
-    async fn apply_profile(
-        &self,
-        profile: Profile,
-        path: String,
-        startup: Option<(&str, &str)>,
-    ) -> Result<(), ManagerError> {
+    async fn apply_profile(&self, profile: Profile, path: String) -> Result<(), ManagerError> {
         // Serialize complete transactions and metadata. Always take controller
         // locks in platform order, then validate every fan before any write.
         let mut loaded = self.profile.lock().await;
         let mut controllers = Vec::new();
         for (_, controller) in &self.controllers {
             controllers.push(controller.lock().await);
-        }
-        if let Some((boot, invocation)) = startup {
-            let (current_boot, current_invocation, first) = crate::startup_record::service_status();
-            let snapshots: Vec<_> = controllers
-                .iter()
-                .map(|controller| controller.snapshot())
-                .collect();
-            if !first
-                || boot != current_boot
-                || invocation != current_invocation
-                || !self.startup_snapshots_ready(loaded.is_none(), &snapshots)
-            {
-                return Err(ManagerError(
-                    "startup restoration is no longer eligible".into(),
-                ));
-            }
         }
         if profile.fans.len() != controllers.len() || controllers.is_empty() {
             return Err(ManagerError(
@@ -623,8 +535,7 @@ impl FanManager {
         let Some(device) = select_device(
             &devices,
             &dmi,
-            &read_device_tree(&device_tree_path)
-                .map_err(|error| ManagerError(error.to_string()))?,
+            &read_device_tree(device_tree_path).map_err(|error| ManagerError(error.to_string()))?,
         )
         .map_err(|error| ManagerError(error.to_string()))?
         else {
@@ -923,8 +834,6 @@ mod tests {
     fn watchdog_requires_recent_progress_from_every_controller() {
         let manager = FanManager {
             profile: Arc::new(Mutex::new(None)),
-            profile_dir: DEFAULT_PROFILE_DIR.into(),
-            override_dir: DEFAULT_OVERRIDE_DIR.into(),
             controllers: Vec::new(),
             monitor_health: Arc::new(vec![
                 StdMutex::new(Instant::now()),
@@ -1060,48 +969,11 @@ mod tests {
         ayaneo_fixture(tree);
         let platform =
             Path::new(env!("CARGO_MANIFEST_DIR")).join("rootfs/usr/share/powerstation/platform");
-        let mut manager =
+        let manager =
             FanManager::discover(platform, tree.path().into(), tree.path().join("compatible"))
                 .unwrap();
-        manager.profile_dir = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("rootfs/usr/powerstation/platform/fan_curves");
-        manager.override_dir = tree.path().join("overrides");
         manager.sleep_monitor_healthy.store(true, Ordering::Release);
         manager
-    }
-
-    #[tokio::test]
-    async fn startup_eligibility_requires_untouched_healthy_protected_automatic() {
-        let tree = TempTree::new();
-        let manager = fixture_manager(&tree);
-        assert!(!manager.startup_restore_ready().await);
-        manager.start().await.unwrap();
-        assert!(manager.startup_restore_ready().await);
-        manager
-            .custom_control_allowed
-            .store(false, Ordering::Release);
-        assert!(!manager.startup_restore_ready().await);
-        manager
-            .custom_control_allowed
-            .store(true, Ordering::Release);
-        manager.controllers[0]
-            .1
-            .lock()
-            .await
-            .fail_to_automatic("test fault");
-        assert!(!manager.startup_restore_ready().await);
-        manager.controllers[0].1.lock().await.start().unwrap();
-        assert!(manager.startup_restore_ready().await);
-        manager
-            .load_profile_json(&json_profile(vec![
-                super::super::profile::FanProfile::automatic("ayaneo-3/system".into()),
-            ]))
-            .await
-            .unwrap();
-        assert!(
-            !manager.startup_restore_ready().await,
-            "explicit Automatic also prevents saved startup replay"
-        );
     }
 
     fn json_profile(fans: Vec<super::super::profile::FanProfile>) -> String {
@@ -1110,6 +982,34 @@ mod tests {
             fans,
         })
         .unwrap()
+    }
+
+    #[tokio::test]
+    async fn ordinary_requests_queue_in_order_without_client_ownership() {
+        let tree = TempTree::new();
+        let manager = fixture_manager(&tree);
+        manager.start().await.unwrap();
+        let lock = manager.profile.lock().await;
+        let first_json = json_profile(vec![manual(20)]);
+        let second_json = json_profile(vec![manual(60)]);
+        let first = manager.load_profile_json(&first_json);
+        let second = manager.load_profile_json(&second_json);
+        tokio::pin!(first, second);
+        assert!(futures_util::poll!(&mut first).is_pending());
+        assert!(futures_util::poll!(&mut second).is_pending());
+        drop(lock);
+        let (first, second) = tokio::join!(first, second);
+        first.unwrap();
+        second.unwrap();
+        assert_eq!(
+            fs::read_to_string(tree.path().join("class/hwmon/hwmon2/pwm1")).unwrap(),
+            "153"
+        );
+        manager.load_profile_json(&first_json).await.unwrap();
+        assert_eq!(
+            fs::read_to_string(tree.path().join("class/hwmon/hwmon2/pwm1")).unwrap(),
+            "51"
+        );
     }
 
     #[tokio::test]
@@ -1281,8 +1181,13 @@ mod tests {
         assert!(sensor.get_property::<bool>("TelemetryValid").await.unwrap());
         assert!(device.get_property::<u32>("Rpm").await.is_err());
         assert!(device.get_property::<u32>("PwmMax").await.is_err());
+        let file = fs::File::open(
+            Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("rootfs/usr/powerstation/platform/fan_curves/quiet.yaml"),
+        )
+        .unwrap();
         let _: () = collection
-            .call("LoadProfile", &("quiet.yaml",))
+            .call("LoadProfile", &(zbus::zvariant::Fd::from(&file),))
             .await
             .unwrap();
         assert_eq!(

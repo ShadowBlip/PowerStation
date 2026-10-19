@@ -4,7 +4,7 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 use zbus::fdo;
 use zbus::object_server::SignalEmitter;
-use zbus::zvariant::ObjectPath;
+use zbus::zvariant::{ObjectPath, OwnedFd};
 use zbus_macros::interface;
 
 pub struct FanBus {
@@ -24,18 +24,18 @@ impl FanBus {
 
 #[interface(name = "org.shadowblip.Fan")]
 impl FanBus {
-    /// Load a complete YAML profile by filename in the approved profile directories. A same-name distro file replaces the packaged file. Validate every fan before writing; any application failure returns all affected fans to Automatic.
+    /// Load a YAML profile from a readable regular file descriptor. The complete profile is validated before changing any fan.
     pub async fn load_profile(
         &self,
-        file: &str,
+        file: OwnedFd,
         #[zbus(connection)] connection: &zbus::Connection,
     ) -> fdo::Result<()> {
-        let result = self.manager.load_profile_file(file).await;
+        let result = self.manager.load_profile_fd(file).await;
         self.manager.emit_changes(connection).await;
         result.map_err(|error| fdo::Error::Failed(error.to_string()))
     }
 
-    /// Load the same profile structure as JSON, without saving it. An all-automatic profile works during lifecycle restrictions and without telemetry. Clients own saving and reloading selections after service startup.
+    /// Load a profile as a JSON string. Clients must handle saving and reloading the profile after service startup.
     pub async fn load_profile_json(
         &self,
         json: &str,
@@ -46,7 +46,7 @@ impl FanBus {
         result.map_err(|error| fdo::Error::Failed(error.to_string()))
     }
 
-    /// Return the fan object paths for this platform. Unsupported systems return an empty list.
+    /// Return all discovered fans for this device.
     pub async fn enumerate_fans(&self) -> Vec<ObjectPath<'static>> {
         self.manager
             .fan_paths()
@@ -55,7 +55,7 @@ impl FanBus {
             .collect()
     }
 
-    /// Return stable, platform-selected temperature sensor objects. Profiles reference their Id properties.
+    /// Return all discovered temperature sensors for this device.
     pub async fn enumerate_sensors(&self) -> Vec<ObjectPath<'static>> {
         self.manager
             .sensor_paths()
@@ -65,50 +65,7 @@ impl FanBus {
             .collect()
     }
 
-    /// Read-only boot ID, current systemd invocation ID, and startup-restoration eligibility. Eligibility requires valid private first-invocation evidence, protected lifecycle, healthy telemetry, no fault and no selected profile. Invalid or unmanaged evidence returns empty identities and false. Clients must pin the unique bus owner and durably consume their boot attempt before loading a saved profile; this method grants no ownership or write privilege.
-    #[zbus(out_args("boot_id", "invocation_id", "eligible"))]
-    pub async fn get_startup_status(&self) -> (String, String, bool) {
-        let (boot, invocation, first) = crate::startup_record::service_status();
-        (
-            boot,
-            invocation,
-            first && self.manager.startup_restore_ready().await,
-        )
-    }
-
-    /// Load a saved JSON profile only on the identified first managed invocation while fans remain healthy, untouched and lifecycle-protected. Recheck identity and eligibility under the complete profile transaction lock; reject stale startup status without writing. Clients must still consume their own boot attempt before calling. Uses the same profile validation, access policy and rollback as LoadProfileJson.
-    pub async fn load_startup_profile_json(
-        &self,
-        boot_id: &str,
-        invocation_id: &str,
-        json: &str,
-        #[zbus(connection)] connection: &zbus::Connection,
-    ) -> fdo::Result<()> {
-        let result = self
-            .manager
-            .load_startup_profile_json(boot_id, invocation_id, json)
-            .await;
-        self.manager.emit_changes(connection).await;
-        result.map_err(|error| fdo::Error::Failed(error.to_string()))
-    }
-
-    /// Load a profile file on an eligible first managed invocation, using the same locked startup checks as LoadStartupProfileJson and the same approved directories and whole-file overrides as LoadProfile.
-    pub async fn load_startup_profile(
-        &self,
-        boot_id: &str,
-        invocation_id: &str,
-        file: &str,
-        #[zbus(connection)] connection: &zbus::Connection,
-    ) -> fdo::Result<()> {
-        let result = self
-            .manager
-            .load_startup_profile_file(boot_id, invocation_id, file)
-            .await;
-        self.manager.emit_changes(connection).await;
-        result.map_err(|error| fdo::Error::Failed(error.to_string()))
-    }
-
-    /// Version 2 replaces the preset/custom-curve API with complete profiles.
+    /// Provisional interface revision; this fan interface is not yet stable.
     #[zbus(property)]
     pub fn api_version(&self) -> u32 {
         2
@@ -120,7 +77,7 @@ impl FanBus {
         self.manager.current_profile().await.0
     }
 
-    /// Resolved profile file path. Empty for JSON profiles, startup, or a controller fault.
+    /// Informational path of the loaded file descriptor, when available. Empty for JSON profiles, startup, or a controller fault.
     #[zbus(property)]
     pub async fn current_profile_path(&self) -> String {
         self.manager.current_profile().await.1

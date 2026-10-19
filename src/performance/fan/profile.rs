@@ -3,10 +3,9 @@ use super::config::{ConfigError, CurvePoint};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::fs;
-use std::path::{Component, Path, PathBuf};
+use std::os::fd::AsRawFd;
+use std::os::unix::fs::FileExt;
 
-pub const DEFAULT_PROFILE_DIR: &str = "/usr/powerstation/platform/fan_curves";
-pub const DEFAULT_OVERRIDE_DIR: &str = "/etc/powerstation/platform/fan_curves.d";
 const MAX_PROFILE_BYTES: usize = 64 * 1024;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -143,57 +142,46 @@ fn check_size(size: usize) -> Result<(), ConfigError> {
     Ok(())
 }
 
-/// Accept a YAML basename, or an absolute path directly inside either approved
-/// directory. Overrides replace the entire file. Never fall back from a broken
-/// override to a packaged profile, and never follow a link outside its directory.
-pub fn load_profile(
-    file: &str,
-    packaged: &Path,
-    overrides: &Path,
-) -> Result<(Profile, PathBuf), ConfigError> {
-    let requested = Path::new(file);
-    let name = requested
-        .file_name()
-        .ok_or_else(|| ConfigError("profile filename required".into()))?;
-    let simple = requested.components().count() == 1
-        && matches!(requested.components().next(), Some(Component::Normal(_)));
-    if !simple
-        && (!requested.is_absolute()
-            || ![packaged, overrides].contains(&requested.parent().unwrap_or(Path::new(""))))
+/// Read only the caller's open file. Never reopen its path as the service user.
+pub fn load_profile(file: &fs::File) -> Result<(Profile, String), ConfigError> {
+    let metadata = file.metadata()?;
+    let flags = unsafe { libc::fcntl(file.as_raw_fd(), libc::F_GETFL) };
+    if flags < 0 {
+        return Err(std::io::Error::last_os_error().into());
+    }
+    if !metadata.is_file() || flags & libc::O_PATH != 0 || flags & libc::O_ACCMODE == libc::O_WRONLY
     {
         return Err(ConfigError(
-            "profile must be a filename in an approved profile directory".into(),
+            "profile descriptor must be a readable regular file".into(),
         ));
     }
-    if !matches!(
-        requested.extension().and_then(|value| value.to_str()),
-        Some("yaml" | "yml")
-    ) {
-        return Err(ConfigError(
-            "profile filename must end in .yaml or .yml".into(),
-        ));
+    if metadata.len() > MAX_PROFILE_BYTES as u64 {
+        return Err(ConfigError("profile exceeds 64 KiB".into()));
     }
-    let replacement = overrides.join(name);
-    let path = match fs::symlink_metadata(&replacement) {
-        Ok(_) => replacement,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => packaged.join(name),
-        Err(error) => return Err(error.into()),
-    };
-    let directory = path.parent().unwrap().canonicalize()?;
-    let canonical = path.canonicalize()?;
-    if canonical.parent() != Some(directory.as_path()) || !canonical.is_file() {
-        return Err(ConfigError(
-            "profile must be a regular file inside its approved directory".into(),
-        ));
+    // pread leaves the caller's shared file offset alone. Parse an owned,
+    // bounded copy, including when the caller replaces or changes its file.
+    let mut bytes = vec![0; MAX_PROFILE_BYTES + 1];
+    let mut size = 0;
+    while size < bytes.len() {
+        match file.read_at(&mut bytes[size..], size as u64) {
+            Ok(0) => break,
+            Ok(count) => size += count,
+            Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
+            Err(error) => return Err(error.into()),
+        }
     }
-    // Bound reads before parsing even if an administrator accidentally installs
-    // an oversized file. The roots themselves remain administrator-controlled.
-    use std::io::Read;
-    let mut raw = String::new();
-    fs::File::open(&canonical)?
-        .take((MAX_PROFILE_BYTES + 1) as u64)
-        .read_to_string(&mut raw)?;
-    Ok((Profile::from_yaml(&raw)?, canonical))
+    check_size(size)?;
+    let raw =
+        std::str::from_utf8(&bytes[..size]).map_err(|error| ConfigError(error.to_string()))?;
+    let profile = Profile::from_yaml(raw)?;
+    let path = fs::read_link(format!("/proc/self/fd/{}", file.as_raw_fd()))
+        .ok()
+        .filter(|path| {
+            path.is_absolute() && !path.as_os_str().as_encoded_bytes().ends_with(b" (deleted)")
+        })
+        .and_then(|path| path.into_os_string().into_string().ok())
+        .unwrap_or_default();
+    Ok((profile, path))
 }
 
 #[cfg(test)]
@@ -228,40 +216,62 @@ mod tests {
     }
 
     #[test]
-    fn override_replaces_whole_profile_and_invalid_override_fails() {
+    fn descriptor_uses_open_file_not_path_or_shared_offset() {
+        use std::io::{Seek, SeekFrom};
         let root =
-            std::env::temp_dir().join(format!("powerstation-profiles-{}", std::process::id()));
-        let packaged = root.join("usr");
-        let overrides = root.join("etc");
-        fs::create_dir_all(&packaged).unwrap();
-        fs::create_dir_all(&overrides).unwrap();
-        fs::write(packaged.join("quiet.yaml"), YAML).unwrap();
-        let (original, _) = load_profile("quiet.yaml", &packaged, &overrides).unwrap();
-        assert_eq!(original.name, "Quiet");
-        fs::write(
-            overrides.join("quiet.yaml"),
-            "name: Distro\nfans: [{fan: ayaneo-3/system, mode: automatic}]\n",
-        )
-        .unwrap();
-        let (replacement, path) = load_profile(
-            packaged.join("quiet.yaml").to_str().unwrap(),
-            &packaged,
-            &overrides,
-        )
-        .unwrap();
-        assert_eq!(replacement.name, "Distro");
-        assert_eq!(replacement.fans[0].mode, FanMode::Automatic);
-        assert_eq!(path, overrides.join("quiet.yaml"));
-        fs::write(overrides.join("quiet.yaml"), "name: incomplete\n").unwrap();
-        assert!(load_profile("quiet.yaml", &packaged, &overrides).is_err());
-        assert!(load_profile("../quiet.yaml", &packaged, &overrides).is_err());
-        assert!(load_profile("/etc/shadow", &packaged, &overrides).is_err());
-        fs::remove_file(overrides.join("quiet.yaml")).unwrap();
-        std::os::unix::fs::symlink(packaged.join("quiet.yaml"), overrides.join("quiet.yaml"))
-            .unwrap();
-        assert!(load_profile("quiet.yaml", &packaged, &overrides).is_err());
+            std::env::temp_dir().join(format!("powerstation-profile-fd-{}", std::process::id()));
+        fs::create_dir_all(&root).unwrap();
+        let path = root.join("profile.yaml");
+        let link = root.join("nix-profile.yaml");
+        fs::write(&path, YAML).unwrap();
+        std::os::unix::fs::symlink(&path, &link).unwrap();
+        let mut file = fs::File::open(&link).unwrap();
+        file.seek(SeekFrom::End(0)).unwrap();
+        let (profile, reported) = load_profile(&file).unwrap();
+        assert_eq!(profile.name, "Quiet");
+        assert_eq!(reported, path.to_str().unwrap());
+        assert_eq!(file.stream_position().unwrap(), YAML.len() as u64);
+        fs::rename(&path, root.join("old.yaml")).unwrap();
+        fs::write(&path, "invalid replacement").unwrap();
+        assert_eq!(load_profile(&file).unwrap().0.name, "Quiet");
+        fs::write(root.join("old.yaml"), "name: incomplete").unwrap();
+        assert!(load_profile(&file).is_err());
+        fs::write(root.join("old.yaml"), " ".repeat(MAX_PROFILE_BYTES + 1)).unwrap();
+        assert!(load_profile(&file).is_err());
         fs::remove_dir_all(root).unwrap();
     }
+
+    #[test]
+    fn descriptor_rejects_special_files_and_unreadable_handles() {
+        use std::os::fd::{FromRawFd, OwnedFd};
+        use std::os::unix::fs::OpenOptionsExt;
+        use std::os::unix::net::UnixStream;
+        for path in ["/tmp", "/dev/null"] {
+            assert!(load_profile(&fs::File::open(path).unwrap()).is_err());
+        }
+        let (socket, _peer) = UnixStream::pair().unwrap();
+        assert!(load_profile(&fs::File::from(OwnedFd::from(socket))).is_err());
+        let mut pipe = [0; 2];
+        assert_eq!(
+            unsafe { libc::pipe2(pipe.as_mut_ptr(), libc::O_CLOEXEC) },
+            0
+        );
+        let reader = unsafe { fs::File::from_raw_fd(pipe[0]) };
+        let _writer = unsafe { fs::File::from_raw_fd(pipe[1]) };
+        assert!(load_profile(&reader).is_err());
+        let path =
+            std::env::temp_dir().join(format!("powerstation-unreadable-fd-{}", std::process::id()));
+        let writer = fs::File::create(&path).unwrap();
+        assert!(load_profile(&writer).is_err());
+        let path_only = fs::OpenOptions::new()
+            .read(true)
+            .custom_flags(libc::O_PATH)
+            .open(&path)
+            .unwrap();
+        assert!(load_profile(&path_only).is_err());
+        fs::remove_file(path).unwrap();
+    }
+
     #[test]
     fn packaged_quiet_curve_is_preserved() {
         let profile = Profile::from_yaml(include_str!(

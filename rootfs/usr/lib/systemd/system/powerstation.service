@@ -4,10 +4,6 @@ After=graphical-session.target systemd-logind.service
 
 [Service]
 Type=notify
-RuntimeDirectory=powerstation-fan-startup
-RuntimeDirectoryMode=0700
-RuntimeDirectoryPreserve=yes
-ExecStartPre=/usr/bin/powerstation --record-fan-startup
 ExecStart=/usr/bin/powerstation
 ExecStopPost=/usr/bin/powerstation --restore-fans-auto
 Restart=on-failure

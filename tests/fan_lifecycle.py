@@ -8,6 +8,7 @@ from pathlib import Path
 import shlex
 import shutil
 import signal
+import socket
 import subprocess
 import tempfile
 import time
@@ -24,8 +25,8 @@ LOGIN_PATH = "/org/freedesktop/login1"
 CONTROL = "org.shadowblip.Fan.TestLogind"
 
 
-def run(*arguments, check=True):
-    result = subprocess.run(arguments, text=True, capture_output=True, timeout=40)
+def run(*arguments, check=True, pass_fds=()):
+    result = subprocess.run(arguments, text=True, capture_output=True, timeout=40, pass_fds=pass_fds)
     if check and result.returncode:
         raise RuntimeError(f"{shlex.join(arguments)} failed: {result.stderr.strip()}")
     return result
@@ -49,8 +50,6 @@ class Harness:
         self.binary = binary
         self.logind = logind
         self.unit = f"powerstation-fan-test-{uuid.uuid4().hex}.service"
-        self.startup_directory = Path(os.environ["XDG_RUNTIME_DIR"]) / (self.unit.removesuffix(".service") + "-startup")
-        self.startup_record = self.startup_directory / "first.json"
         self.processes = []
         self.logs = []
         self.assertions = 0
@@ -71,8 +70,8 @@ class Harness:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text)
 
-    def bus(self, *arguments, check=True):
-        return run("busctl", "--address", self.address, "--timeout=1", *arguments, check=check)
+    def bus(self, *arguments, check=True, pass_fds=()):
+        return run("busctl", "--address", self.address, "--timeout=1", *arguments, check=check, pass_fds=pass_fds)
 
     def get(self, name, path=FAN, interface=INTERFACE):
         return shlex.split(self.bus("get-property", BUS, path, interface, name).stdout)[1]
@@ -80,9 +79,16 @@ class Harness:
     def current_profile(self):
         return self.get("CurrentProfileName", COLLECTION, "org.shadowblip.Fan")
 
-    def startup_status(self):
-        return json.loads(self.bus("--json=short", "call", BUS, COLLECTION,
-                                   "org.shadowblip.Fan", "GetStartupStatus").stdout)["data"]
+    def load_fd(self, fd, check=True):
+        return self.bus("call", BUS, COLLECTION, "org.shadowblip.Fan", "LoadProfile", "h", str(fd),
+                        check=check, pass_fds=(fd,))
+
+    def load_file(self, path=None, check=True):
+        fd = os.open(path or self.profiles / "quiet.yaml", os.O_RDONLY | os.O_NONBLOCK)
+        try:
+            return self.load_fd(fd, check=check)
+        finally:
+            os.close(fd)
 
     def profile(self, mode, percent=None, check=True):
         fan = {"fan": "ayaneo-3/system", "mode": mode}
@@ -168,10 +174,6 @@ class Harness:
                     continue
                 if key == "ExecStopPost":
                     value = f"{self.binary} --restore-fans-auto"
-                if key == "ExecStartPre":
-                    value = f"{self.binary} --record-fan-startup"
-                if key == "RuntimeDirectory":
-                    value = self.startup_directory.name
                 properties += [f"--property={key}={value}"]
         self.service_properties = properties
         self.start_service()
@@ -186,12 +188,11 @@ class Harness:
         self.started = True
         return run("systemd-run", "--user", "--quiet", f"--unit={self.unit}", *self.service_properties,
             f"--setenv=DBUS_SYSTEM_BUS_ADDRESS={self.address}",
-            f"--setenv=POWERSTATION_FAN_PLATFORM_DIR={self.platform}",
+            *([f"--setenv=XDG_DATA_DIRS={self.platform.parent.parent}"] if "nix/store" in str(self.platform)
+              else [f"--setenv=POWERSTATION_FAN_PLATFORM_DIR={self.platform}"]),
             f"--setenv=POWERSTATION_FAN_SYSFS_ROOT={self.sysfs}",
             f"--setenv=POWERSTATION_FAN_STATE_PATH={self.state}",
-            f"--setenv=POWERSTATION_FAN_PROFILE_DIR={self.profiles}",
-            f"--setenv=POWERSTATION_FAN_PROFILE_OVERRIDE_DIR={self.overrides}",
-            f"--setenv=POWERSTATION_FAN_STARTUP_PATH={self.startup_record}", str(self.binary), check=check)
+            f"--setenv=POWERSTATION_FAN_DEVICE_TREE_PATH={self.root}/compatible", str(self.binary), check=check)
 
     def ready(self):
         wait(lambda: self.get("TelemetryValid", SENSOR, "org.shadowblip.Fan.Sensor") == "true", "validated fan telemetry")
@@ -238,25 +239,53 @@ class Harness:
                 binding.write_text('<?xml version="1.0"?>\n' + ET.tostring(node, encoding="unicode") + '\n')
             self.check(contract(live, name) == contract(binding.read_text(), name), f"live {name} signatures match checked-in XML")
 
+    def exercise_descriptors(self):
+        arbitrary = self.root / "user-chosen.yaml"
+        arbitrary.write_bytes((self.profiles / "quiet.yaml").read_bytes())
+        link = self.root / "nix-store-profile.yaml"
+        link.symlink_to(arbitrary)
+        fd = os.open(link, os.O_RDONLY)
+        try:
+            os.lseek(fd, 0, os.SEEK_END)
+            offset = os.lseek(fd, 0, os.SEEK_CUR)
+            self.load_fd(fd)
+            self.check(os.lseek(fd, 0, os.SEEK_CUR) == offset, "descriptor load preserves caller offset")
+            self.check(self.get("CurrentProfilePath", COLLECTION, "org.shadowblip.Fan") == str(arbitrary), "descriptor path is informational")
+            arbitrary.rename(self.root / "original.yaml")
+            arbitrary.write_text("not a profile")
+            self.load_fd(fd)
+            self.check(self.current_profile() == "Quiet", "daemon reads open file instead of replaced caller path")
+            (self.root / "original.yaml").write_text("invalid changed file")
+            self.check(self.load_fd(fd, check=False).returncode != 0, "changed descriptor contents are validated")
+        finally:
+            os.close(fd)
+        self.profile("automatic")
+        for raw in ("not a profile", "x" * (65536 + 1)):
+            arbitrary.write_text(raw)
+            self.check(self.load_file(arbitrary, check=False).returncode != 0, "malformed or oversized descriptor is rejected")
+            self.check(self.get("Mode") == "automatic", "invalid descriptor data causes no hardware writes")
+        reader, writer = os.pipe()
+        left, right = socket.socketpair()
+        descriptors = [reader, writer, left.fileno(), os.open(self.root, os.O_RDONLY),
+                       os.open("/dev/null", os.O_RDONLY), os.open(arbitrary, os.O_WRONLY), os.open(arbitrary, os.O_PATH)]
+        try:
+            for descriptor in descriptors:
+                self.check(self.load_fd(descriptor, check=False).returncode != 0, "nonregular or unreadable descriptor rejected over D-Bus")
+            self.check(self.call("LoadProfile", "h", "-1", check=False).returncode != 0, "invalid descriptor rejected by transport")
+        finally:
+            for descriptor in descriptors:
+                if descriptor != left.fileno():
+                    os.close(descriptor)
+            left.close()
+            right.close()
+        print("PASS real descriptor passing, symlinks, replacement and invalid input", flush=True)
+
     def exercise(self):
-        first_record = self.startup_record.read_bytes()
-        evidence = json.loads(first_record)
-        self.check(evidence["version"] == 1 and evidence["boot_id"] == Path("/proc/sys/kernel/random/boot_id").read_text().strip(), "native startup record identifies the boot")
-        self.check(evidence["invocation_id"] == self.systemctl("show", "--property=InvocationID", "--value").stdout.strip(), "first native invocation matches systemd")
-        self.check(self.startup_record.stat().st_mode & 0o777 == 0o600 and self.startup_directory.stat().st_mode & 0o777 == 0o700, "startup evidence has private permissions")
-        self.check(self.get("ApiVersion", COLLECTION, "org.shadowblip.Fan") == "2", "API v2")
+        self.check(self.get("ApiVersion", COLLECTION, "org.shadowblip.Fan") == "2", "provisional revision marker")
         self.check(self.get("Mode") == "automatic", "fresh start ignores stale Manual")
         self.check(self.current_profile() == "", "startup has no selected profile")
-        boot, invocation, eligible = self.startup_status()
-        self.check(eligible and boot == evidence["boot_id"] and invocation == evidence["invocation_id"], "unprivileged startup status identifies eligible first managed invocation")
-        self.check(self.startup_record.read_bytes() == first_record, "startup status is read only")
-        self.check(self.call("LoadStartupProfile", "sss", boot, "0" * 32, "quiet.yaml", check=False).returncode != 0, "wrong startup invocation is rejected before writes")
-        self.check(self.get("Mode") == "automatic", "rejected startup identity leaves Automatic")
-        self.call("LoadStartupProfile", "sss", boot, invocation, "quiet.yaml")
-        self.check(not self.startup_status()[2], "a selected profile consumes native startup eligibility")
-        self.check(self.call("LoadStartupProfileJson", "sss", boot, invocation,
-                             json.dumps({"name": "Replay", "fans": [{"fan": "ayaneo-3/system", "mode": "manual", "percent": 60}]}), check=False).returncode != 0,
-                   "stale eligible status cannot replay a profile after another request")
+        self.exercise_descriptors()
+        self.load_file()
         self.check(self.get("Mode") == "software_curve", "Quiet selects software curve")
         self.check(int(self.get("Percent")) == 10, "Quiet uses running floor")
         self.profile("manual", 20)
@@ -279,7 +308,7 @@ class Harness:
         self.check(self.get("PercentValid") == "false", "suspended duty unavailable")
         self.check(self.profile("manual", 50, check=False).returncode != 0, "suspended Manual rejected")
         self.check(self.profile("software_curve", check=False).returncode != 0, "suspended curve rejected")
-        self.check(self.call("LoadProfile", "s", "quiet.yaml", check=False).returncode != 0, "suspended file load rejected")
+        self.check(self.load_file(check=False).returncode != 0, "suspended file load rejected")
         new_fan = self.fan.with_name("hwmon7")
         self.fan.rename(new_fan)
         self.fan = new_fan
@@ -305,7 +334,7 @@ class Harness:
         self.ready()
         print("PASS sensor loss, Automatic and telemetry recovery", flush=True)
 
-        self.call("LoadProfile", "s", "quiet.yaml")
+        self.load_file()
         self.prepare(True)
         self.profile("automatic")
         self.check(self.profile("manual", 50, check=False).returncode != 0, "custom remains gated after suspended Automatic")
@@ -322,9 +351,6 @@ class Harness:
             self.start_service()
             self.ready()
             self.mode("automatic")
-            self.check(self.startup_record.read_bytes() == first_record, "clean stop/start preserves first invocation evidence")
-            self.check(evidence["invocation_id"] != self.systemctl("show", "--property=InvocationID", "--value").stdout.strip(), "a later managed invocation cannot appear first")
-            self.check(not self.startup_status()[2], "clean restart cannot qualify automatic client restoration")
             self.check((self.fan / "pwm1_enable").read_text() == "2", "clean restart ignores valid or malformed legacy state")
             self.check(self.state.read_text() == legacy, "legacy file unchanged on clean restart")
         self.legacy = self.state.read_text()
@@ -346,8 +372,6 @@ class Harness:
             self.check((self.fan / "pwm1_enable").read_text() == "2", f"{name} returns to firmware")
             self.check(self.state.read_text() == self.legacy, f"{name} leaves malformed legacy state untouched")
             self.check(self.current_profile() == "", f"{name} does not replay profile")
-            self.check(self.startup_record.read_bytes() == first_record, f"{name} preserves the first-invocation record")
-            self.check(not self.startup_status()[2], f"{name} cannot qualify client restoration")
             print(f"PASS {name} recovery", flush=True)
 
         self.profile("manual", 20)
@@ -383,21 +407,25 @@ class Harness:
         self.systemctl("stop", check=False)
         self.configuration.write_text(self.original_yaml)
         print("PASS malformed hardware configuration rejection", flush=True)
-        self.startup_record.write_text("{")
-        self.start_service(check=False)
-        wait(lambda: self.systemctl("show", "--property=Result", "--value").stdout.strip() == "exit-code", "corrupt startup evidence rejection")
-        self.check(self.startup_record.read_text() == "{", "corrupt first record is not replaced")
-        self.check(self.profile("manual", 50, check=False).returncode != 0, "unrecorded startup never exposes fan controls")
-        self.check((self.fan / "pwm1_enable").read_text() == "2", "startup-record failure retains Automatic cleanup")
+        # XDG discovery supports system profiles outside /usr, including Nix.
+        xdg = self.root / "nix/store/test-powerstation/share"
+        platform = xdg / "powerstation/platform"
+        platform.parent.mkdir(parents=True)
+        platform.symlink_to(self.platform)
+        self.platform = platform
         self.systemctl("stop", check=False)
-        self.startup_record.unlink()
-        self.systemctl("reset-failed", check=False)
-        self.start_service(check=False)
-        wait(lambda: self.systemctl("show", "--property=Result", "--value").stdout.strip() == "exit-code", "missing fenced startup evidence rejection")
-        self.check(not self.startup_record.exists(), "a fenced failed creation cannot become first later")
-        self.check(self.profile("manual", 50, check=False).returncode != 0, "missing fenced evidence never exposes fan controls")
-        self.systemctl("stop", check=False)
-        print("PASS first-invocation evidence and corrupt startup rejection", flush=True)
+        for field in ("sys_vendor", "product_name"):
+            (self.sysfs / "class/dmi/id" / field).unlink()
+        self.configuration.write_text(self.original_yaml.replace("    dmi:", "    device_tree: ['vendor,test-handheld']\n    dmi:"))
+        (self.root / "compatible").write_bytes(b"vendor,test-handheld\0vendor,test-soc\0")
+        self.start_service()
+        self.ready()
+        self.mode("automatic")
+        self.profile("manual", 20)
+        self.check(self.get("Mode") == "manual", "Device Tree only discovery supports ordinary profile requests")
+        self.systemctl("stop")
+        self.check((self.fan / "pwm1_enable").read_text() == "2", "Device Tree recovery helper restores Automatic")
+        print("PASS Device Tree only startup and recovery through relocated platform data", flush=True)
         print(f"PASS lifecycle harness: {self.assertions} assertions", flush=True)
 
     def close(self):
@@ -414,8 +442,6 @@ class Harness:
                     process.wait(timeout=5)
         for log in self.logs:
             log.close()
-        if self.startup_directory.exists():
-            shutil.rmtree(self.startup_directory)
 
 
 def main():

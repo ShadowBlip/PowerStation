@@ -11,21 +11,12 @@ use crate::performance::{cpu::cpu_features, fan::FanManager, gpu::dbus};
 
 mod constants;
 mod performance;
-mod startup_record;
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 2)]
 async fn main() -> Result<(), Box<dyn Error>> {
     SimpleLogger::new().init().unwrap();
     const VERSION: &str = env!("CARGO_PKG_VERSION");
     log::info!("Starting PowerStation v{}", VERSION);
-
-    if std::env::args().any(|argument| argument == "--record-fan-startup") {
-        if std::env::args().len() != 2 {
-            return Err("--record-fan-startup accepts no other arguments".into());
-        }
-        startup_record::record_service_start()?;
-        return Ok(());
-    }
 
     if std::env::args().any(|argument| argument == "--restore-fans-auto") {
         FanManager::restore_default()?;
@@ -98,7 +89,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let gpu_bus = GPUBus::new(gpu_obj_paths);
     connection.object_server().at(GPU_PATH, gpu_bus).await?;
 
-    // Discover configured fans only after an exact DMI match. Ambiguous or
+    // Discover configured fans only after an exact platform match. Ambiguous or
     // unselected configuration never permits a write. Any initialization error
     // exits through systemd recovery instead of leaving an unresolved fan fault
     // behind an otherwise healthy service.
@@ -107,8 +98,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         error
     })?;
     // Establish suspend monitoring and its delay inhibitor while every fan is
-    // still in firmware automatic. Saved custom control is restored only after
-    // that protection is ready.
+    // still in firmware automatic. Custom control requires this protection.
     let sleep_task = if fan_manager.is_empty() {
         None
     } else {

@@ -35,55 +35,31 @@
   </interface>
   <interface name="org.shadowblip.Fan">
     <!--
-     Load a complete YAML profile by filename in the approved profile directories. A same-name distro file replaces the packaged file. Validate every fan before writing; any application failure returns all affected fans to Automatic.
+     Load a YAML profile from a readable regular file descriptor. The complete profile is validated before changing any fan.
      -->
     <method name="LoadProfile">
-      <arg name="file" type="s" direction="in" />
+      <arg name="file" type="h" direction="in" />
     </method>
     <!--
-     Load the same profile structure as JSON, without saving it. An all-automatic profile works during lifecycle restrictions and without telemetry. Clients own saving and reloading selections after service startup.
+     Load a profile as a JSON string. Clients must handle saving and reloading the profile after service startup.
      -->
     <method name="LoadProfileJson">
       <arg name="json" type="s" direction="in" />
     </method>
     <!--
-     Return the fan object paths for this platform. Unsupported systems return an empty list.
+     Return all discovered fans for this device.
      -->
     <method name="EnumerateFans">
       <arg type="ao" direction="out" />
     </method>
     <!--
-     Return stable, platform-selected temperature sensor objects. Profiles reference their Id properties.
+     Return all discovered temperature sensors for this device.
      -->
     <method name="EnumerateSensors">
       <arg type="ao" direction="out" />
     </method>
     <!--
-     Read-only boot ID, current systemd invocation ID, and startup-restoration eligibility. Eligibility requires valid private first-invocation evidence, protected lifecycle, healthy telemetry, no fault and no selected profile. Invalid or unmanaged evidence returns empty identities and false. Clients must pin the unique bus owner and durably consume their boot attempt before loading a saved profile; this method grants no ownership or write privilege.
-     -->
-    <method name="GetStartupStatus">
-      <arg name="boot_id" type="s" direction="out" />
-      <arg name="invocation_id" type="s" direction="out" />
-      <arg name="eligible" type="b" direction="out" />
-    </method>
-    <!--
-     Load a saved JSON profile only on the identified first managed invocation while fans remain healthy, untouched and lifecycle-protected. Recheck identity and eligibility under the complete profile transaction lock; reject stale startup status without writing. Clients must still consume their own boot attempt before calling. Uses the same profile validation, access policy and rollback as LoadProfileJson.
-     -->
-    <method name="LoadStartupProfileJson">
-      <arg name="boot_id" type="s" direction="in" />
-      <arg name="invocation_id" type="s" direction="in" />
-      <arg name="json" type="s" direction="in" />
-    </method>
-    <!--
-     Load a profile file on an eligible first managed invocation, using the same locked startup checks as LoadStartupProfileJson and the same approved directories and whole-file overrides as LoadProfile.
-     -->
-    <method name="LoadStartupProfile">
-      <arg name="boot_id" type="s" direction="in" />
-      <arg name="invocation_id" type="s" direction="in" />
-      <arg name="file" type="s" direction="in" />
-    </method>
-    <!--
-     Version 2 replaces the preset/custom-curve API with complete profiles.
+     Provisional interface revision; this fan interface is not yet stable.
      -->
     <property name="ApiVersion" type="u" access="read" />
     <!--
@@ -91,7 +67,7 @@
      -->
     <property name="CurrentProfileName" type="s" access="read" />
     <!--
-     Resolved profile file path. Empty for JSON profiles, startup, or a controller fault.
+     Informational path of the loaded file descriptor, when available. Empty for JSON profiles, startup, or a controller fault.
      -->
     <property name="CurrentProfilePath" type="s" access="read" />
   </interface>
