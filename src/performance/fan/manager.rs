@@ -1,4 +1,4 @@
-use super::config::{load_databases, select_device, DmiInfo, FanConfig};
+use super::config::{load_databases, read_device_tree, select_device, DmiInfo, FanConfig};
 use super::controller::{
     restore_automatic_for_config, ControllerError, FanController, FanSnapshot,
 };
@@ -18,6 +18,8 @@ use zbus::zvariant::OwnedFd;
 use zbus::{proxy, Connection};
 
 const DEFAULT_PLATFORM_DIR: &str = "/usr/share/powerstation/platform";
+const DEVICE_TREE_PATH_ENV: &str = "POWERSTATION_FAN_DEVICE_TREE_PATH";
+const DEFAULT_DEVICE_TREE_PATH: &str = "/proc/device-tree/compatible";
 const DEFAULT_SYSFS_ROOT: &str = "/sys";
 const PLATFORM_DIR_ENV: &str = "POWERSTATION_FAN_PLATFORM_DIR";
 const SYSFS_ROOT_ENV: &str = "POWERSTATION_FAN_SYSFS_ROOT";
@@ -89,15 +91,25 @@ impl FanManager {
         Self::discover(
             platform_directory(),
             configured_path(SYSFS_ROOT_ENV, DEFAULT_SYSFS_ROOT),
+            configured_path(DEVICE_TREE_PATH_ENV, DEFAULT_DEVICE_TREE_PATH),
         )
     }
 
-    pub fn discover(platform_dir: PathBuf, sysfs_root: PathBuf) -> Result<Self, ManagerError> {
+    pub fn discover(
+        platform_dir: PathBuf,
+        sysfs_root: PathBuf,
+        device_tree_path: PathBuf,
+    ) -> Result<Self, ManagerError> {
         let devices =
             load_databases(&platform_dir).map_err(|error| ManagerError(error.to_string()))?;
         let dmi = DmiInfo::read(&sysfs_root);
-        let Some(device) =
-            select_device(&devices, &dmi).map_err(|error| ManagerError(error.to_string()))?
+        let Some(device) = select_device(
+            &devices,
+            &dmi,
+            &read_device_tree(&device_tree_path)
+                .map_err(|error| ManagerError(error.to_string()))?,
+        )
+        .map_err(|error| ManagerError(error.to_string()))?
         else {
             log::info!("No fan platform configuration matches this system");
             return Ok(Self {
@@ -592,16 +604,29 @@ impl FanManager {
     pub fn restore_default() -> Result<(), ManagerError> {
         let platform_dir = platform_directory();
         let sysfs_root = configured_path(SYSFS_ROOT_ENV, DEFAULT_SYSFS_ROOT);
-        Self::restore_all(&platform_dir, &sysfs_root)?;
+        Self::restore_all(
+            &platform_dir,
+            &sysfs_root,
+            &configured_path(DEVICE_TREE_PATH_ENV, DEFAULT_DEVICE_TREE_PATH),
+        )?;
         Ok(())
     }
 
-    pub fn restore_all(platform_dir: &Path, sysfs_root: &Path) -> Result<(), ManagerError> {
+    pub fn restore_all(
+        platform_dir: &Path,
+        sysfs_root: &Path,
+        device_tree_path: &Path,
+    ) -> Result<(), ManagerError> {
         let devices =
             load_databases(platform_dir).map_err(|error| ManagerError(error.to_string()))?;
         let dmi = DmiInfo::read(sysfs_root);
-        let Some(device) =
-            select_device(&devices, &dmi).map_err(|error| ManagerError(error.to_string()))?
+        let Some(device) = select_device(
+            &devices,
+            &dmi,
+            &read_device_tree(&device_tree_path)
+                .map_err(|error| ManagerError(error.to_string()))?,
+        )
+        .map_err(|error| ManagerError(error.to_string()))?
         else {
             return Ok(());
         };
@@ -813,7 +838,17 @@ async fn acquire_inhibitor(proxy: &LoginManagerProxy<'_>) -> Result<OwnedFd, Man
 }
 
 fn platform_directory() -> PathBuf {
-    configured_path(PLATFORM_DIR_ENV, DEFAULT_PLATFORM_DIR)
+    if let Some(path) = std::env::var_os(PLATFORM_DIR_ENV) {
+        return path.into();
+    }
+    let base_dirs = xdg::BaseDirectories::with_prefix("powerstation");
+    for directory in base_dirs.get_data_dirs() {
+        let platform = directory.join("platform");
+        if platform.is_dir() {
+            return platform;
+        }
+    }
+    PathBuf::from(DEFAULT_PLATFORM_DIR)
 }
 
 fn configured_path(variable: &str, default: &str) -> PathBuf {
@@ -928,7 +963,7 @@ mod tests {
         let platform =
             Path::new(env!("CARGO_MANIFEST_DIR")).join("rootfs/usr/share/powerstation/platform");
 
-        FanManager::restore_all(&platform, tree.path()).unwrap();
+        FanManager::restore_all(&platform, tree.path(), &tree.path().join("compatible")).unwrap();
         assert_eq!(fs::read_to_string(fan.join("pwm1_enable")).unwrap(), "2");
     }
 
@@ -938,7 +973,9 @@ mod tests {
         ayaneo_fixture(&tree);
         let platform =
             Path::new(env!("CARGO_MANIFEST_DIR")).join("rootfs/usr/share/powerstation/platform");
-        let manager = FanManager::discover(platform, tree.path().into()).unwrap();
+        let manager =
+            FanManager::discover(platform, tree.path().into(), tree.path().join("compatible"))
+                .unwrap();
         manager.sleep_monitor_healthy.store(true, Ordering::Release);
         manager.start().await.unwrap();
         let controller = Arc::clone(&manager.controllers[0].1);
@@ -980,7 +1017,9 @@ mod tests {
         ayaneo_fixture(&tree);
         let platform =
             Path::new(env!("CARGO_MANIFEST_DIR")).join("rootfs/usr/share/powerstation/platform");
-        let manager = FanManager::discover(platform, tree.path().into()).unwrap();
+        let manager =
+            FanManager::discover(platform, tree.path().into(), tree.path().join("compatible"))
+                .unwrap();
         manager.sleep_monitor_healthy.store(true, Ordering::Release);
         manager.start().await.unwrap();
         let controller = Arc::clone(&manager.controllers[0].1);
@@ -1021,7 +1060,9 @@ mod tests {
         ayaneo_fixture(tree);
         let platform =
             Path::new(env!("CARGO_MANIFEST_DIR")).join("rootfs/usr/share/powerstation/platform");
-        let mut manager = FanManager::discover(platform, tree.path().into()).unwrap();
+        let mut manager =
+            FanManager::discover(platform, tree.path().into(), tree.path().join("compatible"))
+                .unwrap();
         manager.profile_dir = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("rootfs/usr/powerstation/platform/fan_curves");
         manager.override_dir = tree.path().join("overrides");

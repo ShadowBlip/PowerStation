@@ -45,7 +45,10 @@ pub struct FanDatabase {
 pub struct DeviceConfig {
     pub id: String,
     pub name: String,
+    #[serde(default)]
     pub dmi: Vec<DmiMatch>,
+    #[serde(default)]
+    pub device_tree: Vec<String>,
     pub fans: Vec<FanConfig>,
 }
 
@@ -175,6 +178,36 @@ impl DmiInfo {
     }
 }
 
+/// Device Tree compatible is a NUL-terminated list of exact identifiers.
+pub fn read_device_tree(path: &Path) -> Result<Vec<String>, ConfigError> {
+    use std::io::Read;
+    let file = match fs::File::open(path) {
+        Ok(file) => file,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(error) => return Err(error.into()),
+    };
+    let mut bytes = Vec::new();
+    file.take(65537).read_to_end(&mut bytes)?;
+    if bytes.len() > 65536 || bytes.last() != Some(&0) {
+        return Err(ConfigError(
+            "invalid Device Tree compatible property".into(),
+        ));
+    }
+    bytes[..bytes.len() - 1]
+        .split(|byte| *byte == 0)
+        .map(|value| {
+            let value =
+                std::str::from_utf8(value).map_err(|error| ConfigError(error.to_string()))?;
+            if value.is_empty() {
+                return Err(ConfigError(
+                    "empty Device Tree compatible identifier".into(),
+                ));
+            }
+            Ok(value.to_owned())
+        })
+        .collect()
+}
+
 impl DmiMatch {
     pub fn is_empty(&self) -> bool {
         self.sys_vendor.is_none()
@@ -203,8 +236,12 @@ impl DmiMatch {
 }
 
 impl DeviceConfig {
-    pub fn matches(&self, dmi: &DmiInfo) -> bool {
+    pub fn matches(&self, dmi: &DmiInfo, compatible: &[String]) -> bool {
         self.dmi.iter().any(|candidate| candidate.matches(dmi))
+            || self
+                .device_tree
+                .iter()
+                .any(|candidate| compatible.contains(candidate))
     }
 }
 
@@ -422,16 +459,17 @@ pub fn load_databases(platform_dir: &Path) -> Result<Vec<DeviceConfig>, ConfigEr
 pub fn select_device(
     devices: &[DeviceConfig],
     dmi: &DmiInfo,
+    compatible: &[String],
 ) -> Result<Option<DeviceConfig>, ConfigError> {
     let matches: Vec<&DeviceConfig> = devices
         .iter()
-        .filter(|device| device.matches(dmi))
+        .filter(|device| device.matches(dmi, compatible))
         .collect();
     match matches.as_slice() {
         [] => Ok(None),
         [device] => Ok(Some((*device).clone())),
         _ => Err(ConfigError(format!(
-            "ambiguous fan configuration: DMI matches {}",
+            "ambiguous fan configuration: platform identity matches {}",
             matches
                 .iter()
                 .map(|device| device.id.as_str())
@@ -449,9 +487,15 @@ fn validate_devices(devices: &[DeviceConfig]) -> Result<(), ConfigError> {
         if !device_ids.insert(device.id.clone()) {
             return Err(ConfigError(format!("duplicate device id {}", device.id)));
         }
-        if device.dmi.is_empty() || device.dmi.iter().any(DmiMatch::is_empty) {
+        if (device.dmi.is_empty() && device.device_tree.is_empty())
+            || device.dmi.iter().any(DmiMatch::is_empty)
+            || device
+                .device_tree
+                .iter()
+                .any(|value| value.is_empty() || value.contains('\0'))
+        {
             return Err(ConfigError(format!(
-                "device {} must have non-empty DMI alternatives",
+                "device {} must have non-empty DMI or Device Tree alternatives",
                 device.id
             )));
         }
@@ -560,6 +604,7 @@ mod tests {
                     ..Default::default()
                 },
             ],
+            device_tree: Vec::new(),
             fans: vec![example_fan()],
         }]
     }
@@ -571,21 +616,21 @@ mod tests {
             product_name: Some("AYANEO 3".into()),
             ..Default::default()
         };
-        assert!(devices()[0].matches(&product));
+        assert!(devices()[0].matches(&product, &[]));
 
         let board = DmiInfo {
             board_vendor: Some("AYANEO".into()),
             board_name: Some("AYANEO 3".into()),
             ..Default::default()
         };
-        assert!(devices()[0].matches(&board));
+        assert!(devices()[0].matches(&board, &[]));
 
         let wrong_product = DmiInfo {
             sys_vendor: Some("AYANEO".into()),
             product_name: Some("AYANEO 2".into()),
             ..Default::default()
         };
-        assert!(!devices()[0].matches(&wrong_product));
+        assert!(!devices()[0].matches(&wrong_product, &[]));
     }
 
     #[test]
@@ -599,8 +644,67 @@ mod tests {
             product_name: Some("AYANEO 3".into()),
             ..Default::default()
         };
-        let error = select_device(&candidates, &dmi).unwrap_err();
+        let error = select_device(&candidates, &dmi, &[]).unwrap_err();
         assert!(error.to_string().contains("ambiguous"));
+    }
+
+    #[test]
+    fn device_tree_matching_is_exact_and_rejects_cross_identity_ambiguity() {
+        let mut candidates = devices();
+        let mut dt = candidates[0].clone();
+        dt.id = "arm-device".into();
+        dt.dmi.clear();
+        dt.device_tree = vec!["vendor,handheld".into()];
+        candidates.push(dt);
+        validate_devices(&candidates).unwrap();
+        let compatible = vec!["vendor,handheld".into(), "vendor,soc".into()];
+        assert_eq!(
+            select_device(&candidates, &DmiInfo::default(), &compatible)
+                .unwrap()
+                .unwrap()
+                .id,
+            "arm-device"
+        );
+        assert!(select_device(&candidates, &DmiInfo::default(), &[])
+            .unwrap()
+            .is_none());
+        assert!(select_device(
+            &candidates,
+            &DmiInfo::default(),
+            &["vendor,handheld-pro".into()]
+        )
+        .unwrap()
+        .is_none());
+        let dmi = DmiInfo {
+            sys_vendor: Some("AYANEO".into()),
+            product_name: Some("AYANEO 3".into()),
+            ..Default::default()
+        };
+        assert!(select_device(&candidates, &dmi, &compatible).is_err());
+        candidates[0].device_tree = compatible.clone();
+        assert!(select_device(&candidates, &DmiInfo::default(), &compatible).is_err());
+    }
+
+    #[test]
+    fn reads_nul_separated_device_tree_property() {
+        let path =
+            std::env::temp_dir().join(format!("powerstation-compatible-{}", std::process::id()));
+        assert!(read_device_tree(&path).unwrap().is_empty());
+        fs::write(&path, b"vendor,handheld\0vendor,soc\0").unwrap();
+        assert_eq!(
+            read_device_tree(&path).unwrap(),
+            ["vendor,handheld", "vendor,soc"]
+        );
+        for invalid in [
+            &b"missing terminator"[..],
+            &b"vendor,handheld\0\0"[..],
+            &b"\xff\0"[..],
+            &b""[..],
+        ] {
+            fs::write(&path, invalid).unwrap();
+            assert!(read_device_tree(&path).is_err());
+        }
+        fs::remove_file(path).unwrap();
     }
 
     #[test]

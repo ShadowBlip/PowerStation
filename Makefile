@@ -30,17 +30,20 @@ help: ## Display this help.
 .PHONY: install
 install: build ## Install PowerStation to the given prefix (default: PREFIX=/usr)
 	install -D -m 755 target/$(TARGET_ARCH)/release/powerstation \
-		$(PREFIX)/bin/powerstation
+		$(DESTDIR)$(PREFIX)/bin/powerstation
 	install -D -m 644 rootfs/usr/share/dbus-1/system.d/org.shadowblip.PowerStation.conf \
-		$(PREFIX)/share/dbus-1/system.d/org.shadowblip.PowerStation.conf
+		$(DESTDIR)$(PREFIX)/share/dbus-1/system.d/org.shadowblip.PowerStation.conf
 	install -D -m 644 rootfs/usr/share/dbus-1/system-services/org.shadowblip.PowerStation.service \
-		$(PREFIX)/share/dbus-1/system-services/org.shadowblip.PowerStation.service
+		$(DESTDIR)$(PREFIX)/share/dbus-1/system-services/org.shadowblip.PowerStation.service
 	install -D -m 644 rootfs/usr/lib/systemd/system/powerstation.service \
-		$(PREFIX)/lib/systemd/system/powerstation.service
-	install -d -m755 $(PREFIX)/share/powerstation/platform/ $(PREFIX)/powerstation/platform/fan_curves/
-	install -D -m644 -t $(PREFIX)/powerstation/platform/fan_curves/ rootfs/usr/powerstation/platform/fan_curves/*.yaml
-	install -D -m644 -t $(PREFIX)/share/powerstation/platform/ \
+		$(DESTDIR)$(PREFIX)/lib/systemd/system/powerstation.service
+	install -d -m755 $(DESTDIR)$(PREFIX)/share/powerstation/platform/ $(DESTDIR)$(PREFIX)/powerstation/platform/fan_curves/
+	install -D -m644 -t $(DESTDIR)$(PREFIX)/powerstation/platform/fan_curves/ rootfs/usr/powerstation/platform/fan_curves/*.yaml
+	install -D -m644 -t $(DESTDIR)$(PREFIX)/share/powerstation/platform/ \
 		rootfs/usr/share/powerstation/platform/*
+	sed -i 's|/usr/bin/powerstation|$(PREFIX)/bin/powerstation|g' \
+		$(DESTDIR)$(PREFIX)/lib/systemd/system/powerstation.service \
+		$(DESTDIR)$(PREFIX)/share/dbus-1/system-services/org.shadowblip.PowerStation.service
 ifndef NO_RELOAD
 	systemctl reload dbus
 endif
@@ -111,7 +114,7 @@ dist-archive: dist/powerstation-$(ARCH).tar.gz ## Build a redistributable archiv
 dist/powerstation-$(ARCH).tar.gz: build
 	rm -rf $(CACHE_DIR)/powerstation
 	mkdir -p $(CACHE_DIR)/powerstation
-	$(MAKE) install PREFIX=$(CACHE_DIR)/powerstation/usr NO_RELOAD=true
+	$(MAKE) install DESTDIR=$(CACHE_DIR)/powerstation PREFIX=/usr NO_RELOAD=true
 	mkdir -p dist
 	tar cvfz $@ -C $(CACHE_DIR) powerstation
 	cd dist && sha256sum powerstation-$(ARCH).tar.gz > powerstation-$(ARCH).tar.gz.sha256.txt
