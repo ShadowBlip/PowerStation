@@ -151,7 +151,7 @@ busctl set-property org.shadowblip.PowerStation /org/shadowblip/Performance/CPU/
 
 ## Fan control
 
-Fan API **version 2** loads complete YAML or JSON profiles. Fresh service starts, restarts and reboots enter firmware Automatic; applications own saving and reloading profiles. Successful suspend/resume retains the live profile in memory. This replaces the earlier preset/custom-curve API. See [profiles and examples](./docs/fan-platform-yaml.md). D-Bus activation and systemd recovery are included in archive and RPM assets.
+The experimental fan interface loads complete YAML profiles through caller-opened file descriptors, or JSON profiles through `LoadProfileJson`. Its integer revision marker remains provisional. Fresh service starts, restarts and reboots enter firmware Automatic; applications own saving and reloading profiles. Successful suspend/resume retains the live profile in memory. See [profiles and examples](./docs/fan-platform-yaml.md). D-Bus activation and systemd recovery are included in archive and RPM assets.
 
 ## License
 

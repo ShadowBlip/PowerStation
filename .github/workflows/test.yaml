@@ -3,9 +3,10 @@ name: 🪲 Test
 on: [push]
 
 jobs:
-  fan-lifecycle:
-    name: Run isolated fan lifecycle tests
+  run-tests:
+    name: Run tests
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v3
       - run: |
@@ -14,17 +15,8 @@ jobs:
           sudo loginctl enable-linger "$(id -un)"
           export XDG_RUNTIME_DIR="/run/user/$(id -u)"
           export DBUS_SESSION_BUS_ADDRESS="unix:path=$XDG_RUNTIME_DIR/bus"
-          make in-docker TARGET='test-fan-lifecycle-build'
+          make in-docker TARGET='test test-fan-lifecycle-build'
           make test-fan-lifecycle
-
-  run-tests:
-    name: Run tests
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v3
-      - run: |
-          make in-docker TARGET='test'
 
   build-x86_64:
     name: Run x86_64 build

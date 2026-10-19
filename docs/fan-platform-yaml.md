@@ -1,35 +1,18 @@
 # Fan profiles and platform configuration
 
-Fan API **version 2** loads complete profiles through
-`org.shadowblip.Fan` at `/org/shadowblip/Performance/Fan`.
-`EnumerateFans` and `EnumerateSensors` return objects with stable `Id` values.
-Use those IDs in profiles; object path indexes and hwmon numbering may change.
+The fan interface is experimental and has not been merged. `ApiVersion = 2` is a provisional revision marker, not a stable compatibility promise. See [the methods](fan.md), [fan properties](fan-device.md) and [sensor properties](fan-sensor.md).
 
 ## Profiles
 
-A profile has a name and one entry for every enumerated fan. Each entry selects
-one mode:
+A profile names a selection for each controlled fan. Use `EnumerateFans` and `EnumerateSensors` to find stable IDs and available modes.
 
-| Mode | Behavior | Profile fields |
-| --- | --- | --- |
-| `automatic` | Let firmware control the fan. | `fan`, `mode` |
-| `manual` | Request a fixed percentage, monitored by the service. | `fan`, `mode`, `percent` |
-| `software_curve` | The service interpolates a curve using the hottest selected sensor. | `fan`, `mode`, `sensors`, `curve` |
-| `firmware_curve` | Program the driver's native curve and let hardware interpolate it. | `fan`, `mode`, `sensors`, `curve` |
-
-`AvailableModes` lists each fan's capabilities. Native curves require reviewed
-hardware mode values, complete native point attributes, and a trusted binding to
-the sensor used by that hardware. AYANEO 3 currently supports Automatic, Manual,
-and software curves; it does not advertise native curves.
-
-The packaged `quiet.yaml` lives under
-`/usr/powerstation/platform/fan_curves`. An administrator can install a
-same-filename YAML replacement under `/etc/powerstation/platform/fan_curves.d/`.
-The replacement supplies the **whole profile**. Fields are never merged, and a
-broken replacement is an error rather than a reason to load the packaged file.
-`LoadProfile` accepts a YAML basename, or an absolute path directly inside either
-of these directories. The distro replacement takes precedence in either case.
-Paths outside these directories and links escaping their directory are rejected.
+```yaml
+name: Manual
+fans:
+  - fan: ayaneo-3/system
+    mode: manual
+    percent: 60
+```
 
 ```yaml
 name: Quiet
@@ -37,119 +20,60 @@ fans:
   - fan: ayaneo-3/system
     mode: software_curve
     sensors: [ayaneo-3/system/cpu]
-    curve:
-      - [45, 0]
-      - [55, 15]
-      - [65, 25]
-      - [75, 35]
-      - [85, 55]
-      - [90, 75]
-      - [95, 100]
+    curve: [[45, 0], [55, 15], [65, 25], [75, 35], [85, 55], [90, 75], [95, 100]]
 ```
 
-Curve pairs contain degrees Celsius and a percentage from 0 to 100. Temperatures
-must increase, percentages must not decrease, and the last point must reach
-100% at or below 95°C. Platform minimums also apply. Native curves require the
-exact driver point count, every percentage at or above the running floor, and
-exactly the driver's bound sensor ID. Points are never resampled. Use a software
-curve for fan-stop hysteresis or a different sensor selection.
+| Mode | Behavior | Profile fields |
+| --- | --- | --- |
+| `automatic` | Let the firmware control cooling. | No percentage, sensors or curve. |
+| `manual` | Request a fixed control percentage. | `percent` from 0 to 100, subject to the platform's minimum running percentage. |
+| `software_curve` | The service interpolates the curve using the hottest selected sensor. | `sensors` and `curve`. |
+| `firmware_curve` | Program the curve supported by the driver. | `sensors` and `curve` matching the native hardware constraints. |
 
-```sh
-busctl call org.shadowblip.PowerStation /org/shadowblip/Performance/Fan \
-  org.shadowblip.Fan LoadProfile s quiet.yaml
-```
+Only modes listed in each fan's `AvailableModes` are supported. Percentages describe control duty; they are not measured RPM. Check `PercentValid` and sensor `TelemetryValid` before displaying values.
 
-`LoadProfileJson` accepts the identical structure as JSON. For example, Manual
-40% and firmware Automatic on the AYANEO fan:
+Curves require at least two points. Temperatures must be finite, strictly increasing, within the platform's valid range and no higher than 95°C. Percentages must be integers from 0 to 100, nondecreasing, and meet the platform's running floor. The final point must be 100%. Zero is accepted only when the platform permits stopping and the point is within its stop-temperature limit. Sensor IDs must be known, unique, associated with that fan and available. A native curve must use the platform's designated hardware sensor, contain exactly the driver's number of points, and satisfy its integer temperature/PWM representation and bounds. Hardware validation also checks required safety sensors independently of the selected curve sensors.
 
-```json
-{"name":"Manual 40%","fans":[{"fan":"ayaneo-3/system","mode":"manual","percent":40}]}
-```
+`LoadProfile(h)` reads a YAML profile from a file descriptor opened by the caller. It accepts readable regular files, including files opened through symlinks or outside packaged directories. It rejects pipes, sockets, devices, directories and unreadable descriptors. Input is limited to 64 KiB and copied before validation and hardware writes. The service never reopens the caller's path. `CurrentProfilePath` is informational descriptor metadata and is empty when unavailable.
+
+`LoadProfileJson(s)` accepts the equivalent JSON profile, with the same size and validation limits:
 
 ```json
 {"name":"Automatic","fans":[{"fan":"ayaneo-3/system","mode":"automatic"}]}
 ```
 
-Profiles are limited to 64 KiB. Unknown fields, unknown or duplicate IDs,
-unsupported modes, invalid curves, and incomplete fan selections are errors.
-The service validates the whole selection before changing hardware. If an
-application error occurs after writes begin, it attempts verified Automatic on
-**every affected fan** and reports the failure, including any failed handoff.
+The complete profile is validated before hardware writes. Unknown or duplicate IDs, unsupported modes and invalid fields are rejected. If application fails after writes begin, every affected fan is returned to Automatic and the call reports failure. Requests are serialized through the profile transaction lock; clients do not acquire permanent ownership.
 
-`CurrentProfileName` and `CurrentProfilePath` report the active selection. The
-path is empty for JSON. Both are empty at startup and after a profile fault.
-Fan `Mode` reports the current mode; during suspend it is `automatic` while the
-live profile remains in memory. `Percent` is 0–100 and meaningful only when
-`PercentValid` is true. Firmware Automatic and native curves have no public duty
-readback. Sensor `TemperatureC` similarly requires `TelemetryValid`.
+The packaged Quiet profile is `/usr/powerstation/platform/fan_curves/quiet.yaml`. Clients choosing a packaged name first check `/etc/powerstation/platform/fan_curves.d/` for a same-name replacement. A replacement overrides the whole profile; fields are never merged. An explicit path selects that exact file. Clients open the selected file and pass its descriptor. Installations using another prefix must expose or resolve their corresponding profile directory in the client.
 
-## Startup and lifecycle
+## Startup and recovery
 
-Every new service process, clean restart, crash/watchdog restart, and reboot
-starts in **firmware Automatic**. Applications own saving profiles and deciding
-when to reload them. The daemon neither reads nor writes legacy
-`/var/lib/powerstation/fan-state.yaml`; existing files are left untouched.
+Every service process starts in firmware Automatic. Applications own saving preferences and may restore a profile through an ordinary request at application startup. The service does not prevent a client from restoring after a service restart. There are no startup records, boot-attempt fences or guarded restoration methods.
 
-Unprivileged applications can use the additive startup-status and guarded
-startup-load methods described in [fan-startup.md](fan-startup.md). These keep
-the recorder private and recheck first-invocation eligibility under the profile
-transaction lock. A regular profile load must not emulate automatic restoration
-from a previously read status value.
+Successful suspend/resume retains the live profile in memory, hands control to firmware before sleep, rediscovers hardware on resume and restores the profile after protection and telemetry recover. Custom requests are rejected during lifecycle restrictions. Automatic remains callable without valid telemetry. Sensor loss, stalls, unexpected driver mode changes, logind loss and watchdog recovery return control to firmware; faults clear the active profile identity. A driver-mode check can detect some external changes but does not provide exclusive sysfs access.
 
-Successful suspend/resume retains only the live profile in memory. Before sleep,
-the service blocks custom requests, including requests already queued on a fan
-lock, and verifies a firmware handoff under logind's delay inhibitor. Resume
-reacquires protection, discovers fresh paths and telemetry, and restores the live
-selection. An Automatic profile remains callable during lifecycle restrictions
-and without telemetry; selecting it during suspend cancels custom restoration.
-
-The handoff retries within the reported `InhibitDelayMaxUSec` budget. Expiry,
-logind owner loss/replacement, or unverified recovery blocks custom control and
-makes the service unhealthy. The systemd watchdog and `ExecStopPost` helper
-provide additional automatic recovery. A blocked kernel write cannot be
-cancelled, and delay inhibitors expire or close on process death, so these
-mechanisms cannot guarantee a completed handoff before every sleep.
+The service owns the provisional 95°C full-speed and 98°C firmware-handoff policy. Firmware handoff transfers cooling responsibility; it does not prove stronger cooling. Physical thermal acceptance remains required.
 
 ## Trusted platform configuration
 
-Reviewed `fan-*.yaml` files under `/usr/share/powerstation/platform` define exact
-DMI alternatives, hwmon names, parent drivers, channels, stable fan/sensor IDs,
-required safety sensors, driver mode values, PWM conversion/readback tolerance,
-write order, running floor, hysteresis and stall/telemetry limits. See the
-[packaged AYANEO entry](../rootfs/usr/share/powerstation/platform/fan-ayaneo-3.yaml).
-This database is separate from editable profiles and the TDP TOML database.
-Profiles cannot supply paths, mode register values, or critical thresholds.
+Hardware configuration is administrator-controlled. Profiles cannot choose sysfs paths, driver mode numbers, required safety sensors or weaker critical thresholds.
 
-DMI alternatives are ORed; every populated field within an alternative must
-match exactly. Ambiguous device, fan, or sensor matches fail. Discovery uses
-names and sensor labels rather than `hwmonN` indexes. Optional native points must
-be complete and contiguous. `backend: software_curve` disables native curves;
-`auto` advertises native curves only when attributes, a mode value and
-`firmware_curve_sensor` binding exist; `hardware_curve` requires those facts.
-The profile still explicitly selects software or firmware mode.
+Fan platform files use `fan-*.yaml` in the first existing `powerstation/platform` directory in the service's XDG data directories, with `/usr/share/powerstation/platform` as fallback. `POWERSTATION_FAN_PLATFORM_DIR` explicitly overrides that directory. The service environment and these files must be controlled by the administrator.
 
-Required hardware safety sensors are monitored regardless of the profile's
-chosen curve sensors. The provisional **95°C full-speed / 98°C firmware-handoff**
-policy belongs to the service. Full speed also overrides a native curve if a
-required safety sensor reaches 95°C; native control can resume after cooling.
-Handoff transfers responsibility to firmware; it does not establish that firmware
-can cool better than 100% software duty. These values await physical acceptance.
+A device can match DMI alternatives, Device Tree compatible strings, or both:
 
-Unexpected driver mode changes, telemetry failures, stalls and readback failures
-trigger Automatic. Mode readback can detect a writer switching modes; it cannot
-detect another writer using the same mode. Existing fan daemons must be stopped
-before enabling custom control. There is no sysfs exclusivity guarantee.
+```yaml
+schema_version: 1
+devices:
+  - id: example
+    name: Example handheld
+    dmi:
+      - sys_vendor: Example
+        product_name: Handheld
+    device_tree: ["example,handheld"]
+    fans: [] # Replace with the platform's validated fan definitions.
+```
 
-The recovery helper repeats trusted DMI/fan matching but requires only the mode
-attribute, so failed temperature/RPM/PWM/curve discovery need not prevent
-Automatic. Unsupported hardware returns empty enumerations.
+DMI fields within an alternative are ANDed; alternatives are ORed. `device_tree` is a list of exact strings from the NUL-separated `/proc/device-tree/compatible` property. Either identity source can match a device. Multiple matching devices are rejected, including cross-DMI/Device-Tree ambiguity. Missing identity matches nothing.
 
-The existing system-bus policy allows local callers to send requests to the
-privileged service. Such callers may select profiles, but cannot choose arbitrary
-hardware targets or lower the internal safety policy. Configuration directories
-and service environment are administrator-controlled. Test overrides
-`POWERSTATION_FAN_PLATFORM_DIR`, `POWERSTATION_FAN_SYSFS_ROOT`,
-`POWERSTATION_FAN_PROFILE_DIR`, and `POWERSTATION_FAN_PROFILE_OVERRIDE_DIR` are
-absent from the packaged unit. `POWERSTATION_FAN_STATE_PATH` is ignored.
-
-See [Fan validation](fan-validation.md) for evidence and remaining release gates.
+Each fan definition specifies its hwmon name, parent driver, channel, driver mode values, PWM range/write order, temperature sources and operating limits. Native curve support additionally requires a complete set of driver points and a designated hardware sensor. See [the packaged AYANEO configuration](../rootfs/usr/share/powerstation/platform/fan-ayaneo-3.yaml) for the schema in use. Adding a platform requires driver and device validation; a matching identifier alone does not establish safe control.
