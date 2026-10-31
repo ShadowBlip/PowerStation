@@ -148,6 +148,12 @@ min_tdp = 4.0
 max_tdp = 30.0
 max_boost = 5.0
 
+[[models]]
+model_name = "ONEXPLAYER X2Mini"
+min_tdp = 3.0
+max_tdp = 45.0
+max_boost = 1.0
+
 # Framework Desktop
 [[models]]
 model_name = "Desktop (AMD Ryzen AI Max 300 Series)"
