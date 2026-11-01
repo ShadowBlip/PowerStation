@@ -1,0 +1,54 @@
+<?xml version="1.0"?>
+<node>
+  <interface name="org.freedesktop.DBus.Introspectable">
+    <method name="Introspect">
+      <arg type="s" direction="out" />
+    </method>
+  </interface>
+  <interface name="org.freedesktop.DBus.Peer">
+    <method name="Ping">
+    </method>
+    <method name="GetMachineId">
+      <arg type="s" direction="out" />
+    </method>
+  </interface>
+  <interface name="org.freedesktop.DBus.Properties">
+    <method name="Get">
+      <arg name="interface_name" type="s" direction="in" />
+      <arg name="property_name" type="s" direction="in" />
+      <arg type="v" direction="out" />
+    </method>
+    <method name="Set">
+      <arg name="interface_name" type="s" direction="in" />
+      <arg name="property_name" type="s" direction="in" />
+      <arg name="value" type="v" direction="in" />
+    </method>
+    <method name="GetAll">
+      <arg name="interface_name" type="s" direction="in" />
+      <arg type="a{sv}" direction="out" />
+    </method>
+    <signal name="PropertiesChanged">
+      <arg name="interface_name" type="s" />
+      <arg name="changed_properties" type="a{sv}" />
+      <arg name="invalidated_properties" type="as" />
+    </signal>
+  </interface>
+  <interface name="org.shadowblip.Fan.Sensor">
+    <!--
+     Stable sensor ID used in profile sensor lists.
+     -->
+    <property name="Id" type="s" access="read" />
+    <!--
+     Human-readable sensor name.
+     -->
+    <property name="Name" type="s" access="read" />
+    <!--
+     Whether a valid reading is available. False during suspend and after telemetry loss.
+     -->
+    <property name="TelemetryValid" type="b" access="read" />
+    <!--
+     Last validated temperature in degrees Celsius. Read only when TelemetryValid is true.
+     -->
+    <property name="TemperatureC" type="d" access="read" />
+  </interface>
+</node>

@@ -1,9 +1,15 @@
 [Unit]
 Description=PowerStation Service
-After=graphical-session.target
+After=graphical-session.target systemd-logind.service
 
 [Service]
+Type=notify
 ExecStart=/usr/bin/powerstation
+ExecStopPost=/usr/bin/powerstation --restore-fans-auto
+Restart=on-failure
+RestartSec=1s
+WatchdogSec=5s
+TimeoutStopSec=10s
 
 [Install]
 WantedBy=multi-user.target

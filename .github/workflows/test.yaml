@@ -10,7 +10,13 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - run: |
-          make in-docker TARGET='test'
+          sudo apt-get update
+          sudo apt-get install -y libpci3 dbus-daemon dbus-user-session
+          sudo loginctl enable-linger "$(id -un)"
+          export XDG_RUNTIME_DIR="/run/user/$(id -u)"
+          export DBUS_SESSION_BUS_ADDRESS="unix:path=$XDG_RUNTIME_DIR/bus"
+          make in-docker TARGET='test test-fan-lifecycle-build'
+          make test-fan-lifecycle
 
   build-x86_64:
     name: Run x86_64 build

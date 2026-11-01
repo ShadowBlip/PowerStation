@@ -1,4 +1,5 @@
 [D-BUS Service]
-Name=com.github.guelfey.Demo
-User=${USER}
-Exec=/tmp/dbus-demo-server
+Name=org.shadowblip.PowerStation
+User=root
+SystemdService=powerstation.service
+Exec=/usr/bin/powerstation

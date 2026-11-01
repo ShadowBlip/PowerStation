@@ -5,7 +5,20 @@
 <xsl:stylesheet version="1.0"
 xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
 xmlns:doc="http://www.freedesktop.org/dbus/1.0/doc.dtd">
+<xsl:param name="interface-prefix" select="''"/>
 <xsl:output encoding="UTF-8" omit-xml-declaration="yes" indent="no"/>
+
+<!-- zbus emits Rust documentation as comments immediately before members. -->
+<xsl:template name="member-documentation">
+    <xsl:choose>
+        <xsl:when test="doc:doc">
+            <xsl:value-of select="doc:doc/doc:summary | doc:doc/doc:description/doc:para"/>
+        </xsl:when>
+        <xsl:otherwise>
+            <xsl:value-of select="normalize-space(preceding-sibling::node()[not(self::text())][1][self::comment()])"/>
+        </xsl:otherwise>
+    </xsl:choose>
+</xsl:template>
 
 <xsl:template name="string-replace-all">
     <xsl:param name="text" />
@@ -33,7 +46,7 @@ xmlns:doc="http://www.freedesktop.org/dbus/1.0/doc.dtd">
 
 <xsl:template match="/">
 # DBus Interface API
-<xsl:for-each select="node/interface">
+<xsl:for-each select="node/interface[starts-with(@name, $interface-prefix)]">
 ## <xsl:value-of select="@name"/>
   <xsl:text>&#xa;</xsl:text>
 <xsl:if test="property">
@@ -51,8 +64,9 @@ xmlns:doc="http://www.freedesktop.org/dbus/1.0/doc.dtd">
     </xsl:call-template>
   </xsl:variable>
   <xsl:variable name="asummary">
+    <xsl:variable name="documentation"><xsl:call-template name="member-documentation"/></xsl:variable>
     <xsl:call-template name="string-replace-all">
-      <xsl:with-param name="text" select="doc:doc/doc:summary" />
+      <xsl:with-param name="text" select="$documentation" />
       <xsl:with-param name="replace" select="'&#xA;'" />
       <xsl:with-param name="by" select="' '" />
     </xsl:call-template>
@@ -69,7 +83,7 @@ xmlns:doc="http://www.freedesktop.org/dbus/1.0/doc.dtd">
 </xsl:variable>
 #### <xsl:value-of select="$mname"/>
   <xsl:text>&#xa;&#xa;</xsl:text>
-  <xsl:value-of select="doc:doc/doc:description/doc:para"/>
+  <xsl:call-template name="member-documentation"/>
   <xsl:text>&#xa;</xsl:text>
   <xsl:if test="arg">
 ##### Arguments

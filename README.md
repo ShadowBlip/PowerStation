@@ -13,10 +13,10 @@
 
 ## About
 
-PowerStation is an open source TDP control and performance daemon for Linux that 
-can be used to control CPU and GPU settings for better performance and battery
+PowerStation is an open source TDP control and performance daemon for Linux that
+can be used to control CPU, GPU, and supported system-fan settings for better performance and battery
 life. Performance control is done through [DBus](https://www.freedesktop.org/wiki/Software/dbus/)
-to provide a UI-agnostic interface to CPU and GPU settings.
+to provide a UI-agnostic interface.
 
 ## Install
 
@@ -51,6 +51,11 @@ Individual interface documentation can be found here:
 * [org.shadowblip.GPU](./docs/gpu.md)
 * [org.shadowblip.GPU.Card](./docs/gpu-card.md)
 * [org.shadowblip.GPU.Card.Connector](./docs/gpu-card-connector.md)
+* [org.shadowblip.Fan](./docs/fan.md)
+* [org.shadowblip.Fan.Device](./docs/fan-device.md)
+* [org.shadowblip.Fan.Sensor](./docs/fan-sensor.md)
+* [Fan profiles and platform YAML](./docs/fan-platform-yaml.md)
+* [Fan validation](./docs/fan-validation.md)
 
 ## Usage
 

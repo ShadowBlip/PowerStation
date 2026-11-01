@@ -1,0 +1,74 @@
+<?xml version="1.0"?>
+<node>
+  <interface name="org.freedesktop.DBus.Introspectable">
+    <method name="Introspect">
+      <arg type="s" direction="out" />
+    </method>
+  </interface>
+  <interface name="org.freedesktop.DBus.Peer">
+    <method name="Ping">
+    </method>
+    <method name="GetMachineId">
+      <arg type="s" direction="out" />
+    </method>
+  </interface>
+  <interface name="org.freedesktop.DBus.Properties">
+    <method name="Get">
+      <arg name="interface_name" type="s" direction="in" />
+      <arg name="property_name" type="s" direction="in" />
+      <arg type="v" direction="out" />
+    </method>
+    <method name="Set">
+      <arg name="interface_name" type="s" direction="in" />
+      <arg name="property_name" type="s" direction="in" />
+      <arg name="value" type="v" direction="in" />
+    </method>
+    <method name="GetAll">
+      <arg name="interface_name" type="s" direction="in" />
+      <arg type="a{sv}" direction="out" />
+    </method>
+    <signal name="PropertiesChanged">
+      <arg name="interface_name" type="s" />
+      <arg name="changed_properties" type="a{sv}" />
+      <arg name="invalidated_properties" type="as" />
+    </signal>
+  </interface>
+  <interface name="org.shadowblip.Fan">
+    <!--
+     Load a YAML profile from a caller-opened readable regular file, including arbitrary paths and symlinks. Pipes, sockets, devices, directories and unreadable descriptors are rejected. Input is limited to 64 KiB and copied without reopening the path or changing the shared offset. The complete profile is validated before changing any fan.
+     -->
+    <method name="LoadProfile">
+      <arg name="file" type="h" direction="in" />
+    </method>
+    <!--
+     Load a profile as a JSON string, limited to 64 KiB. The complete profile is validated before changing any fan. Clients must handle saving and reloading the profile after service startup.
+     -->
+    <method name="LoadProfileJson">
+      <arg name="json" type="s" direction="in" />
+    </method>
+    <!--
+     Return all discovered fans for this device.
+     -->
+    <method name="EnumerateFans">
+      <arg type="ao" direction="out" />
+    </method>
+    <!--
+     Return all discovered temperature sensors for this device.
+     -->
+    <method name="EnumerateSensors">
+      <arg type="ao" direction="out" />
+    </method>
+    <!--
+     Provisional interface revision; this fan interface is not yet stable.
+     -->
+    <property name="ApiVersion" type="u" access="read" />
+    <!--
+     Active profile name, including during successful suspend. Empty after startup or a controller fault.
+     -->
+    <property name="CurrentProfileName" type="s" access="read" />
+    <!--
+     Informational path of the loaded file descriptor, when available. Empty for JSON profiles, startup, or a controller fault.
+     -->
+    <property name="CurrentProfilePath" type="s" access="read" />
+  </interface>
+</node>

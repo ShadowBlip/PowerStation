@@ -1,0 +1,13 @@
+name: Quiet
+fans:
+  - fan: ayaneo-3/system
+    mode: software_curve
+    sensors: [ayaneo-3/system/cpu]
+    curve:
+      - [45, 0]
+      - [55, 15]
+      - [65, 25]
+      - [75, 35]
+      - [85, 55]
+      - [90, 75]
+      - [95, 100]

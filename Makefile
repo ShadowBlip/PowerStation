@@ -30,13 +30,20 @@ help: ## Display this help.
 .PHONY: install
 install: build ## Install PowerStation to the given prefix (default: PREFIX=/usr)
 	install -D -m 755 target/$(TARGET_ARCH)/release/powerstation \
-		$(PREFIX)/bin/powerstation
+		$(DESTDIR)$(PREFIX)/bin/powerstation
 	install -D -m 644 rootfs/usr/share/dbus-1/system.d/org.shadowblip.PowerStation.conf \
-		$(PREFIX)/share/dbus-1/system.d/org.shadowblip.PowerStation.conf
+		$(DESTDIR)$(PREFIX)/share/dbus-1/system.d/org.shadowblip.PowerStation.conf
+	install -D -m 644 rootfs/usr/share/dbus-1/system-services/org.shadowblip.PowerStation.service \
+		$(DESTDIR)$(PREFIX)/share/dbus-1/system-services/org.shadowblip.PowerStation.service
 	install -D -m 644 rootfs/usr/lib/systemd/system/powerstation.service \
-		$(PREFIX)/lib/systemd/system/powerstation.service
-	install -D -m644 -t $(PREFIX)/share/powerstation/platform/ \
+		$(DESTDIR)$(PREFIX)/lib/systemd/system/powerstation.service
+	install -d -m755 $(DESTDIR)$(PREFIX)/share/powerstation/platform/ $(DESTDIR)$(PREFIX)/powerstation/platform/fan_curves/
+	install -D -m644 -t $(DESTDIR)$(PREFIX)/powerstation/platform/fan_curves/ rootfs/usr/powerstation/platform/fan_curves/*.yaml
+	install -D -m644 -t $(DESTDIR)$(PREFIX)/share/powerstation/platform/ \
 		rootfs/usr/share/powerstation/platform/*
+	sed -i 's|/usr/bin/powerstation|$(PREFIX)/bin/powerstation|g' \
+		$(DESTDIR)$(PREFIX)/lib/systemd/system/powerstation.service \
+		$(DESTDIR)$(PREFIX)/share/dbus-1/system-services/org.shadowblip.PowerStation.service
 ifndef NO_RELOAD
 	systemctl reload dbus
 endif
@@ -45,6 +52,7 @@ endif
 uninstall: ## Uninstall PowerStation
 	rm $(PREFIX)/bin/powerstation
 	rm $(PREFIX)/share/dbus-1/system.d/org.shadowblip.PowerStation.conf
+	rm $(PREFIX)/share/dbus-1/system-services/org.shadowblip.PowerStation.service
 	rm $(PREFIX)/lib/systemd/system/powerstation.service
 
 ##@ Development
@@ -52,12 +60,12 @@ uninstall: ## Uninstall PowerStation
 .PHONY: debug
 debug: target/$(TARGET_ARCH)/debug/powerstation  ## Build debug build
 target/$(TARGET_ARCH)/debug/powerstation: $(ALL_RS) Cargo.lock
-	cargo build --target $(TARGET_ARCH)
+	cargo build --locked --target $(TARGET_ARCH)
 
 .PHONY: build
 build: target/$(TARGET_ARCH)/release/powerstation ## Build release build
 target/$(TARGET_ARCH)/release/powerstation: $(ALL_RS) Cargo.lock
-	cargo build --release --target $(TARGET_ARCH)
+	cargo build --release --locked --target $(TARGET_ARCH)
 
 .PHONY: all
 all: build debug ## Build release and debug builds
@@ -68,7 +76,16 @@ run: debug ## Build and run
 
 .PHONY: test
 test: debug ## Build and run all tests
-	cargo test -- --show-output
+	cargo test --locked -- --show-output
+
+FAN_TEST_BINARY ?= target/$(TARGET_ARCH)/debug/powerstation
+FAN_TEST_LOGIND ?= target/$(TARGET_ARCH)/debug/examples/fan_test_logind
+.PHONY: test-fan-lifecycle-build test-fan-lifecycle
+test-fan-lifecycle-build: ## Build the daemon and private logind lifecycle fixture
+	cargo build --locked --target $(TARGET_ARCH) --bin powerstation --example fan_test_logind
+
+test-fan-lifecycle: ## Run isolated fan lifecycle tests using the user systemd manager
+	python3 tests/fan_lifecycle.py $(FAN_TEST_BINARY) $(FAN_TEST_LOGIND)
 
 .PHONY: clean
 clean: ## Remove build artifacts
@@ -97,7 +114,7 @@ dist-archive: dist/powerstation-$(ARCH).tar.gz ## Build a redistributable archiv
 dist/powerstation-$(ARCH).tar.gz: build
 	rm -rf $(CACHE_DIR)/powerstation
 	mkdir -p $(CACHE_DIR)/powerstation
-	$(MAKE) install PREFIX=$(CACHE_DIR)/powerstation/usr NO_RELOAD=true
+	$(MAKE) install DESTDIR=$(CACHE_DIR)/powerstation PREFIX=/usr NO_RELOAD=true
 	mkdir -p dist
 	tar cvfz $@ -C $(CACHE_DIR) powerstation
 	cd dist && sha256sum powerstation-$(ARCH).tar.gz > powerstation-$(ARCH).tar.gz.sha256.txt
@@ -106,13 +123,14 @@ dist/powerstation-$(ARCH).tar.gz: build
 dist-rpm: dist/$(NAME)-$(VERSION)-1.$(ARCH).rpm ## Build a redistributable RPM package
 dist/$(NAME)-$(VERSION)-1.$(ARCH).rpm: target/$(TARGET_ARCH)/release/$(NAME)
 	mkdir -p dist
-	cargo install cargo-generate-rpm
+	cargo install cargo-generate-rpm --version 0.21.0 --locked
 	cargo generate-rpm --target $(TARGET_ARCH)
 	cp ./target/$(TARGET_ARCH)/generate-rpm/$(NAME)-$(VERSION)-1.$(ARCH).rpm dist
 	cd dist && sha256sum $(NAME)-$(VERSION)-1.$(ARCH).rpm > $(NAME)-$(VERSION)-1.$(ARCH).rpm.sha256.txt
 
 INTROSPECT_CARD ?= Card2
 INTROSPECT_CONNECTOR ?= eDP/1
+INTROSPECT_FAN ?= Fan0
 .PHONY: introspect
 introspect: ## Generate DBus XML
 	echo "Generating DBus XML spec..."
@@ -130,6 +148,14 @@ introspect: ## Generate DBus XML
 	xmlstarlet ed -L -d '//node[@name]' bindings/dbus-xml/org-shadowblip-gpu-card.xml
 	busctl introspect org.shadowblip.PowerStation \
 		/org/shadowblip/Performance/GPU/Card2/$(INTROSPECT_CONNECTOR) --xml-interface > bindings/dbus-xml/org-shadowblip-gpu-card-connector.xml
+	busctl introspect org.shadowblip.PowerStation \
+		/org/shadowblip/Performance/Fan --xml-interface > bindings/dbus-xml/org-shadowblip-fan.xml
+	xmlstarlet ed -L -d '//node[@name]' bindings/dbus-xml/org-shadowblip-fan.xml
+	busctl introspect org.shadowblip.PowerStation \
+		/org/shadowblip/Performance/Fan/$(INTROSPECT_FAN) --xml-interface > bindings/dbus-xml/org-shadowblip-fan-device.xml
+	xmlstarlet ed -L -d '//node[@name]' bindings/dbus-xml/org-shadowblip-fan-device.xml
+	busctl introspect org.shadowblip.PowerStation \
+		/org/shadowblip/Performance/Fan/$(INTROSPECT_FAN)/Sensor0 --xml-interface > bindings/dbus-xml/org-shadowblip-fan-sensor.xml
 
 XSL_TEMPLATE := ./docs/dbus2markdown.xsl
 .PHONY: docs
@@ -150,6 +176,16 @@ docs: ## Generate markdown docs for DBus interfaces
 	xsltproc --novalid -o docs/gpu-card-connector.md $(XSL_TEMPLATE) bindings/dbus-xml/org-shadowblip-gpu-card-connector.xml
 	mdformat ./docs/gpu-card-connector.md
 	sed -i 's/DBus Interface API/GPU.Card.Connector DBus Interface API/g' ./docs/gpu-card-connector.md
+	xsltproc --novalid --stringparam interface-prefix org.shadowblip.Fan -o docs/fan.md $(XSL_TEMPLATE) bindings/dbus-xml/org-shadowblip-fan.xml
+	mdformat ./docs/fan.md
+	sed -i 's/DBus Interface API/Fan DBus Interface API/g' ./docs/fan.md
+	xsltproc --novalid --stringparam interface-prefix org.shadowblip.Fan -o docs/fan-device.md $(XSL_TEMPLATE) bindings/dbus-xml/org-shadowblip-fan-device.xml
+	mdformat ./docs/fan-device.md
+	sed -i 's/DBus Interface API/Fan.Device DBus Interface API/g' ./docs/fan-device.md
+
+	xsltproc --novalid --stringparam interface-prefix org.shadowblip.Fan -o docs/fan-sensor.md $(XSL_TEMPLATE) bindings/dbus-xml/org-shadowblip-fan-sensor.xml
+	mdformat ./docs/fan-sensor.md
+	sed -i 's/DBus Interface API/Fan.Sensor DBus Interface API/g' ./docs/fan-sensor.md
 
 # Refer to .releaserc.yaml for release configuration
 .PHONY: sem-release 
@@ -173,7 +209,6 @@ in-docker: docker-builder
 		-e HOME=/home/build \
 		-e CARGO_HOME=/home/build/.cargo \
 		-e TARGET_ARCH=$(TARGET_ARCH) \
-		-e PKG_CONFIG_SYSROOT_DIR="/usr/$(ARCH)-linux-gnu" \
 		--user $(shell id -u):$(shell id -g) \
 		$(IMAGE_NAME):$(IMAGE_TAG) \
 		make $(TARGET)
