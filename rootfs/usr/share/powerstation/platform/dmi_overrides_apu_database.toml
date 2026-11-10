@@ -5,7 +5,14 @@ min_tdp = 8.0
 max_tdp = 28.0
 max_boost = 4.0
 
-#AYANEO
+# AOKZOE
+[[models]]
+model_name = "AOKZOE A1X"
+min_tdp = 4.0
+max_tdp = 30.0
+max_boost = 5.0
+
+# AYANEO
 [[models]]
 model_name = "AIR"
 min_tdp = 5.0
