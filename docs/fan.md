@@ -2,8 +2,8 @@
 
 PowerStation can control fans that have `pwmN` and `pwmN_enable` files in
 hwmon. Fans start in automatic (firmware) mode and go back to it when
-PowerStation stops. Userspace saves the user's profile and loads it again
-after boot.
+PowerStation stops or after three failed updates in a row. Userspace saves
+the user's profile and loads it again after boot.
 
 ## Profiles
 
@@ -28,7 +28,8 @@ A curve is a list of `[temperature in °C, fan percent]` points.
 | `software_curve` | `curve` and `sensors`. Uses the hottest sensor. |
 | `firmware_curve` | `curve` with one point per `pwmN_auto_pointM` in hwmon |
 
-A fan runs at 100% when one of its sensors reaches 95°C.
+A fan runs at 100% when one of its sensors reaches 95°C. Software curves
+speed the fan up at once but slow it down by at most 2% per second.
 
 Installed profiles are in `/usr/share/powerstation/platform/fan_curves/`.
 A file with the same name in `/etc/powerstation/platform/fan_curves.d/`

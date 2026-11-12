@@ -12,6 +12,12 @@ use super::{
 /// regardless of the loaded profile.
 const CRITICAL_TEMPERATURE: f64 = 95.0;
 const UPDATE_INTERVAL: Duration = Duration::from_secs(1);
+/// Failed updates in a row before a fan returns to automatic. Some embedded
+/// controllers return an occasional one-off I/O error.
+const MAX_FAILURES: u8 = 3;
+/// Largest drop in percent per update for software curves, so the fan winds
+/// down smoothly instead of following every temperature spike.
+const MAX_STEP_DOWN: u8 = 2;
 
 pub enum Command {
     Load {
@@ -70,6 +76,9 @@ struct Control {
     percent: u8,
     sensors: Vec<Sensor>,
     curve: Vec<(u8, u8)>,
+    /// Last percent written, None until the first update
+    last_percent: Option<u8>,
+    failures: u8,
 }
 
 /// Owns all fans and applies profiles. Every fan returns to firmware control
@@ -256,6 +265,8 @@ impl FanManager {
                 percent,
                 sensors,
                 curve,
+                last_percent: None,
+                failures: 0,
             });
         }
 
@@ -263,9 +274,9 @@ impl FanManager {
     }
 
     /// Write the current settings of a fan to hardware
-    fn apply(&self, index: usize) -> Result<(), FanError> {
+    fn apply(&mut self, index: usize) -> Result<(), FanError> {
         let fan = &self.fans[index];
-        let Some(control) = &self.controls[index] else {
+        let Some(control) = &mut self.controls[index] else {
             return fan.set_enable(PWM_AUTOMATIC);
         };
 
@@ -280,16 +291,21 @@ impl FanManager {
     }
 
     fn update_all(&mut self) {
-        for index in 0..self.fans.len() {
-            let Some(control) = &self.controls[index] else {
+        for (fan, slot) in self.fans.iter().zip(self.controls.iter_mut()) {
+            let Some(control) = slot else {
                 continue;
             };
-            let fan = &self.fans[index];
             let Err(e) = update(fan, control) else {
+                control.failures = 0;
                 continue;
             };
+            control.failures += 1;
+            if control.failures < MAX_FAILURES {
+                log::warn!("Failed to update fan {}: {e}", fan.id);
+                continue;
+            }
             log::error!("Returning fan {} to automatic: {e}", fan.id);
-            self.controls[index] = None;
+            *slot = None;
             if let Err(e) = fan.set_enable(PWM_AUTOMATIC) {
                 log::error!("Failed to set fan {} to automatic: {e}", fan.id);
             }
@@ -318,21 +334,30 @@ impl Drop for FanManager {
 /// Set the fan speed for manual and software curve modes. The fan runs at
 /// 100% at the critical temperature. Writing pwmN_enable again restores
 /// manual control if the firmware took it back, e.g. after resume.
-fn update(fan: &Fan, control: &Control) -> Result<(), FanError> {
+fn update(fan: &Fan, control: &mut Control) -> Result<(), FanError> {
     let mut temperature = f64::MIN;
     for sensor in &control.sensors {
         temperature = temperature.max(sensor.temperature()?);
     }
 
-    let percent = match control.mode {
+    let mut percent = match control.mode {
         _ if temperature >= CRITICAL_TEMPERATURE => 100,
         Mode::SoftwareCurve => interpolate(&control.curve, temperature),
         Mode::Manual => control.percent,
         Mode::Automatic | Mode::FirmwareCurve => return Ok(()),
     };
 
+    // Software curves speed up at once but slow down gradually
+    if control.mode == Mode::SoftwareCurve && temperature < CRITICAL_TEMPERATURE {
+        if let Some(last) = control.last_percent {
+            percent = percent.max(last.saturating_sub(MAX_STEP_DOWN));
+        }
+    }
+
     if fan.enable()? != PWM_MANUAL {
         fan.set_enable(PWM_MANUAL)?;
     }
-    fan.set_percent(percent)
+    fan.set_percent(percent)?;
+    control.last_percent = Some(percent);
+    Ok(())
 }
