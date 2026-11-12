@@ -1,0 +1,41 @@
+<?xml version="1.0"?>
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN" "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<node>
+  <interface name="org.shadowblip.Fan">
+    <!--
+     Load a TOML profile from an open file.
+     -->
+    <method name="LoadProfile">
+      <arg name="file" type="h" direction="in"/>
+    </method>
+    <!--
+     Load a profile from a JSON string.
+     -->
+    <method name="LoadProfileJson">
+      <arg name="json" type="s" direction="in"/>
+    </method>
+    <!--
+     Returns a list of DBus paths to all fans.
+     -->
+    <method name="EnumerateFans">
+      <arg type="ao" direction="out"/>
+    </method>
+    <!--
+     Name of the loaded profile. Empty when no profile is loaded.
+     -->
+    <property name="ProfileName" type="s" access="read"/>
+    <!--
+     Path of the loaded profile. Empty for JSON profiles or when no
+     profile is loaded.
+     -->
+    <property name="ProfilePath" type="s" access="read"/>
+    <!--
+     Paths of the installed profiles for this device.
+     -->
+    <property name="Profiles" type="as" access="read"/>
+    <!--
+     IDs of all temperature sensors that can be used in profiles.
+     -->
+    <property name="Sensors" type="as" access="read"/>
+  </interface>
+</node>

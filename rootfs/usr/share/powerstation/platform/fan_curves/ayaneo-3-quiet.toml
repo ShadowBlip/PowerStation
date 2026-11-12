@@ -1,0 +1,10 @@
+name = "Quiet"
+
+[match]
+dmi = { sys_vendor = "AYANEO", product_name = "AYANEO 3" }
+
+[[fans]]
+fan = "ayaneo_ec/fan1"
+mode = "software_curve"
+sensors = ["k10temp/Tctl"]
+curve = [[45, 0], [55, 15], [65, 25], [75, 35], [85, 55], [90, 75], [95, 100]]

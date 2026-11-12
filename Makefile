@@ -36,7 +36,9 @@ install: build ## Install PowerStation to the given prefix (default: PREFIX=/usr
 	install -D -m 644 rootfs/usr/lib/systemd/system/powerstation.service \
 		$(PREFIX)/lib/systemd/system/powerstation.service
 	install -D -m644 -t $(PREFIX)/share/powerstation/platform/ \
-		rootfs/usr/share/powerstation/platform/*
+		rootfs/usr/share/powerstation/platform/*.toml
+	install -D -m644 -t $(PREFIX)/share/powerstation/platform/fan_curves/ \
+		rootfs/usr/share/powerstation/platform/fan_curves/*.toml
 ifndef NO_RELOAD
 	systemctl reload dbus
 endif
