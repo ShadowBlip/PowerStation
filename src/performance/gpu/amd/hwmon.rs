@@ -191,8 +191,9 @@ impl TDPDevice for Hwmon {
         }
 
         // Get the current boost value before updating. We will
-        // use this value to also adjust the Fast PPT Limit.
-        let boost = self.boost().await? as u64;
+        // use this value to also adjust the Fast PPT Limit. boost() returns
+        // watts, so scale it to microwatts like the other values.
+        let boost = (self.boost().await? * TDP_SCALE) as u64;
         let slow_ppt = (value * TDP_SCALE) as u64; // 15 == 15000000
         let fast_ppt = (value * TDP_SCALE) as u64 + boost;
 
