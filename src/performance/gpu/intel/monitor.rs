@@ -1,6 +1,6 @@
 use std::{
     collections::{HashMap, HashSet, VecDeque},
-    path::PathBuf,
+    path::{Path, PathBuf},
     time::{Duration, Instant},
 };
 
@@ -188,11 +188,52 @@ impl IntelMonitorGPU {
 
     /// Collect GPU client metrics for every currently running process
     async fn collect_metrics_drm_clients(&mut self) -> Result<(), std::io::Error> {
-        // Loop through all running procs
+        // The scan makes a syscall for every open file descriptor on the system,
+        // so it runs as one blocking task rather than one task per file operation.
+        let card_path = self.card_path.clone();
+        let scanned =
+            match tokio::task::spawn_blocking(move || Self::scan_drm_clients(&card_path)).await {
+                Ok(scanned) => scanned?,
+                // A panic in the scan stays fatal to the monitor task, as when it ran inline
+                Err(e) if e.is_panic() => std::panic::resume_unwind(e.into_panic()),
+                Err(e) => return Err(std::io::Error::other(e)),
+            };
+
         let mut current_clients = HashSet::new();
-        let mut proc_dir = fs::read_dir("/proc").await?;
-        while let Ok(Some(entry)) = proc_dir.next_entry().await {
-            let Ok(file_type) = entry.file_type().await else {
+        for (client_id, cycles_rcs, cycles_total_rcs) in scanned {
+            current_clients.insert(client_id);
+            self.metrics
+                .entry(client_id)
+                .and_modify(|entry| entry.push_rcs_sample(cycles_rcs, cycles_total_rcs))
+                .or_insert({
+                    let mut samples = MetricSamples::default();
+                    samples.push_rcs_sample(cycles_rcs, cycles_total_rcs);
+                    samples
+                });
+        }
+
+        // Remove any client metrics that no longer exist
+        let mut clients_to_remove = vec![];
+        for client_id in self.metrics.keys() {
+            if !current_clients.contains(client_id) {
+                clients_to_remove.push(*client_id);
+            }
+        }
+        for client_id in clients_to_remove {
+            self.metrics.remove(&client_id);
+        }
+
+        Ok(())
+    }
+
+    /// Read the RCS cycle counters of every DRM client of the given card from
+    /// /proc/<pid>/fdinfo, once per client and process.
+    fn scan_drm_clients(card_path: &Path) -> Result<Vec<(DrmClientId, u64, u64)>, std::io::Error> {
+        // Loop through all running procs
+        let mut scanned = vec![];
+        let mut proc_dir = std::fs::read_dir("/proc")?;
+        while let Some(Ok(entry)) = proc_dir.next() {
+            let Ok(file_type) = entry.file_type() else {
                 continue;
             };
             if !file_type.is_dir() {
@@ -202,18 +243,18 @@ impl IntelMonitorGPU {
             // Loop through every fd and look for a DRM handle
             let pid_path = entry.path();
             let fd_path = pid_path.join("fd");
-            let Ok(mut fd_dir) = fs::read_dir(fd_path).await else {
+            let Ok(mut fd_dir) = std::fs::read_dir(fd_path) else {
                 continue;
             };
             let mut pid_current_clients = HashSet::new();
-            while let Ok(Some(entry)) = fd_dir.next_entry().await {
-                let Ok(file_type) = entry.file_type().await else {
+            while let Some(Ok(entry)) = fd_dir.next() {
+                let Ok(file_type) = entry.file_type() else {
                     continue;
                 };
                 if !file_type.is_symlink() {
                     continue;
                 }
-                let Ok(target_path) = fs::read_link(entry.path()).await else {
+                let Ok(target_path) = std::fs::read_link(entry.path()) else {
                     continue;
                 };
                 let Some(target_path_str) = target_path.as_os_str().to_str() else {
@@ -229,7 +270,7 @@ impl IntelMonitorGPU {
 
                 // The device name (e.g. renderD128), should exist as a DRM device
                 // for this card.
-                let device_path = self.card_path.join(format!("device/drm/{device_name}"));
+                let device_path = card_path.join(format!("device/drm/{device_name}"));
                 if !device_path.exists() {
                     continue;
                 }
@@ -237,7 +278,7 @@ impl IntelMonitorGPU {
                 // Read the fdinfo for this file descriptor
                 let fd_name = entry.file_name().to_string_lossy().to_string();
                 let fdinfo_path = pid_path.join("fdinfo").join(fd_name);
-                let Ok(fdinfo) = fs::read_to_string(fdinfo_path).await else {
+                let Ok(fdinfo) = std::fs::read_to_string(fdinfo_path) else {
                     continue;
                 };
                 let lines = fdinfo.split("\n");
@@ -288,31 +329,12 @@ impl IntelMonitorGPU {
                     continue;
                 }
 
-                current_clients.insert(client_id);
                 pid_current_clients.insert(client_id);
-                self.metrics
-                    .entry(client_id)
-                    .and_modify(|entry| entry.push_rcs_sample(cycles_rcs, cycles_total_rcs))
-                    .or_insert({
-                        let mut samples = MetricSamples::default();
-                        samples.push_rcs_sample(cycles_rcs, cycles_total_rcs);
-                        samples
-                    });
+                scanned.push((client_id, cycles_rcs, cycles_total_rcs));
             }
         }
 
-        // Remove any client metrics that no longer exist
-        let mut clients_to_remove = vec![];
-        for client_id in self.metrics.keys() {
-            if !current_clients.contains(client_id) {
-                clients_to_remove.push(*client_id);
-            }
-        }
-        for client_id in clients_to_remove {
-            self.metrics.remove(&client_id);
-        }
-
-        Ok(())
+        Ok(scanned)
     }
 }
 
