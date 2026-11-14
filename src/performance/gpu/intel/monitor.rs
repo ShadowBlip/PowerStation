@@ -7,7 +7,7 @@ use std::{
 use tokio::{
     fs,
     sync::mpsc::{channel, Sender},
-    time::interval,
+    time::{interval, MissedTickBehavior},
 };
 
 /// How often GPU metrics should be collected from running processes
@@ -67,6 +67,9 @@ impl IntelMonitorGPU {
         tokio::task::spawn(async move {
             log::debug!("Intel GPU Monitor started");
             let mut sample_interval = interval(SAMPLE_INTERVAL);
+            // Missed ticks (while the monitor sleeps, or after a scan that overran
+            // the interval) must not fire as back-to-back catch-up scans
+            sample_interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
             loop {
                 tokio::select! {
                     cmd = rx.recv() => {
