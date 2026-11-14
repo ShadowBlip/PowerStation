@@ -328,10 +328,23 @@ struct MetricSamples {
     /// Total number of cycles completed by the CCS engine
     #[allow(dead_code)]
     drm_total_cycles_ccs: VecDeque<u64>,
+    /// When the last RCS sample was taken
+    last_rcs_sample: Option<Instant>,
 }
 
 impl MetricSamples {
     fn push_rcs_sample(&mut self, client_usage: u64, total_usage: u64) {
+        // A client held by several processes is read once for each of them in
+        // the same scan. Only the first read counts: two samples microseconds
+        // apart would make its busy percentage noise.
+        let now = Instant::now();
+        if self
+            .last_rcs_sample
+            .is_some_and(|last| now.duration_since(last) < SAMPLE_INTERVAL / 2)
+        {
+            return;
+        }
+        self.last_rcs_sample = Some(now);
         self.drm_cycles_rcs.push_front(client_usage);
         if self.drm_cycles_rcs.len() > 2 {
             self.drm_cycles_rcs.pop_back();
