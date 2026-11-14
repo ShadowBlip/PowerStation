@@ -13,8 +13,8 @@ use tokio::{
 /// How often GPU metrics should be collected from running processes
 const SAMPLE_INTERVAL: Duration = Duration::from_millis(1000);
 
-/// Identifier of a DRM client
-type DrmClientId = u16;
+/// Identifier of a DRM client (drm-client-id, a 64-bit counter in the kernel)
+type DrmClientId = u64;
 
 /// Commands that can be sent to a running monitor
 #[derive(Debug)]
