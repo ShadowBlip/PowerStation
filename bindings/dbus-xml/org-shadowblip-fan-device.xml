@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN" "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<node>
+  <interface name="org.shadowblip.Fan.Device">
+    <!--
+     Modes this fan supports.
+     -->
+    <property name="AvailableModes" type="as" access="read"/>
+    <!--
+     Fan ID used in profiles.
+     -->
+    <property name="Id" type="s" access="read"/>
+    <!--
+     Current mode of the fan.
+     -->
+    <property name="Mode" type="s" access="read"/>
+    <!--
+     Current fan speed from 0 to 100 percent.
+     -->
+    <property name="Percent" type="y" access="read"/>
+  </interface>
+</node>

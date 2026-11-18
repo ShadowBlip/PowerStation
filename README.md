@@ -51,6 +51,7 @@ Individual interface documentation can be found here:
 * [org.shadowblip.GPU](./docs/gpu.md)
 * [org.shadowblip.GPU.Card](./docs/gpu-card.md)
 * [org.shadowblip.GPU.Card.Connector](./docs/gpu-card-connector.md)
+* [org.shadowblip.Fan and fan profiles](./docs/fan.md)
 
 ## Usage
 

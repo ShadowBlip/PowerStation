@@ -1,11 +1,17 @@
 use constants::PREFIX;
 use simple_logger::SimpleLogger;
-use std::{error::Error, future::pending};
+use std::error::Error;
+use tokio::signal::unix::{signal, SignalKind};
 use zbus::fdo::ObjectManager;
 use zbus::Connection;
 
-use crate::constants::{BUS_NAME, CPU_PATH, GPU_PATH};
+use crate::constants::{BUS_NAME, CPU_PATH, FAN_PATH, GPU_PATH};
 use crate::dbus::gpu::{get_connectors, get_gpus, GPUBus};
+use crate::performance::fan::{
+    dbus::{FanBus, FanDevice},
+    hwmon,
+    manager::FanManager,
+};
 use crate::performance::{cpu::cpu_features, gpu::dbus};
 
 mod constants;
@@ -82,11 +88,34 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let gpu_bus = GPUBus::new(gpu_obj_paths);
     connection.object_server().at(GPU_PATH, gpu_bus).await?;
 
+    // Discover fans and temperature sensors and serve them on DBus
+    let (fans, sensors) = hwmon::discover();
+    let (fan_manager, fan_client) = FanManager::new(fans.clone(), sensors.clone());
+    let fan_task = tokio::spawn(fan_manager.run());
+    let mut fan_paths: Vec<String> = Vec::new();
+    for (index, fan) in fans.into_iter().enumerate() {
+        let fan_path = format!("{FAN_PATH}/Fan{index}");
+        let fan_device = FanDevice::new(fan_client.clone(), index, fan);
+        connection
+            .object_server()
+            .at(fan_path.clone(), fan_device)
+            .await?;
+        fan_paths.push(fan_path);
+    }
+    let fan_bus = FanBus::new(fan_client, fan_paths, &sensors);
+    connection.object_server().at(FAN_PATH, fan_bus).await?;
+
     // Request a name
     connection.request_name(BUS_NAME).await?;
 
-    // Do other things or go to wait forever
-    pending::<()>().await;
+    // Run until stopped, then return all fans to automatic
+    let mut terminate = signal(SignalKind::terminate())?;
+    tokio::select! {
+        _ = tokio::signal::ctrl_c() => {}
+        _ = terminate.recv() => {}
+    }
+    fan_task.abort();
+    let _ = fan_task.await;
 
     Ok(())
 }
